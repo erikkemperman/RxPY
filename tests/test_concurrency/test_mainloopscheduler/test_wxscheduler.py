@@ -1,11 +1,11 @@
-from datetime import timedelta
-from time import sleep
-import unittest
 import pytest
+import unittest
+
+from datetime import datetime, timedelta
+from time import sleep
 
 from rx.concurrency.mainloopscheduler import WxScheduler
 from rx.internal.basic import default_now
-from rx.internal.constants import DELTA_ZERO
 
 wx = pytest.importorskip('wx')
 
@@ -22,79 +22,95 @@ class AppExit(wx.Timer):
 
 class TestWxScheduler(unittest.TestCase):
 
-    def test_wx_schedule_now(self):
+    def test_wx_now(self):
         scheduler = WxScheduler(wx)
-        diff = scheduler.now - default_now()
-        assert abs(diff) < timedelta(milliseconds=1)
+        time1 = scheduler.now
+        assert isinstance(time1, datetime)
 
-    def test_wx_schedule_now_units(self):
+        time2 = default_now()
+        diff = (time2 - time1).total_seconds()
+        assert abs(diff) < 0.01
+
+    def test_wx_now_units(self):
         scheduler = WxScheduler(wx)
-        diff = scheduler.now
+        time1 = scheduler.now
+
         sleep(0.1)
-        diff = scheduler.now - diff
-        assert timedelta(milliseconds=80) < diff < timedelta(milliseconds=180)
 
-    def test_wx_schedule_action(self):
+        time2 = scheduler.now
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
+
+    def test_wx_schedule(self):
         app = wx.AppConsole()
-        exit = AppExit(app)
+        quit = AppExit(app)
         scheduler = WxScheduler(wx)
-        ran = False
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal ran
-            ran = True
+            nonlocal time2
+            time2 = scheduler.now
 
         scheduler.schedule(action)
-        exit.Start(100, wx.TIMER_ONE_SHOT)
+
+        quit.Start(100, wx.TIMER_ONE_SHOT)
+
         app.MainLoop()
         scheduler.cancel_all()
 
-        assert ran is True
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert diff < 0.15
 
-    def test_wx_schedule_action_relative(self):
+    def test_wx_schedule_relative(self):
         app = wx.AppConsole()
-        exit = AppExit(app)
+        quit = AppExit(app)
         scheduler = WxScheduler(wx)
-        starttime = default_now()
-        endtime = None
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal endtime
-            endtime = default_now()
+            nonlocal time2
+            time2 = scheduler.now
 
         scheduler.schedule_relative(0.1, action)
-        exit.Start(200, wx.TIMER_ONE_SHOT)
+
+        quit.Start(300, wx.TIMER_ONE_SHOT)
+
         app.MainLoop()
         scheduler.cancel_all()
 
-        assert endtime is not None
-        diff = endtime - starttime
-        assert timedelta(milliseconds=80) < diff < timedelta(milliseconds=180)
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
 
-    def test_wx_schedule_action_absolute(self):
+    def test_wx_schedule_absolute(self):
         app = wx.AppConsole()
-        exit = AppExit(app)
+        quit = AppExit(app)
         scheduler = WxScheduler(wx)
-        starttime = default_now()
-        endtime = None
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal endtime
-            endtime = default_now()
+            nonlocal time2
+            time2 = scheduler.now
 
-        due = scheduler.now + timedelta(milliseconds=100)
-        scheduler.schedule_absolute(due, action)
-        exit.Start(200, wx.TIMER_ONE_SHOT)
+        duetime = time1 + timedelta(seconds=0.1)
+        scheduler.schedule_absolute(duetime, action)
+
+        quit.Start(300, wx.TIMER_ONE_SHOT)
+
         app.MainLoop()
         scheduler.cancel_all()
 
-        assert endtime is not None
-        diff = endtime - starttime
-        assert timedelta(milliseconds=80) < diff < timedelta(milliseconds=180)
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
 
-    def test_wx_schedule_action_cancel(self):
+    def test_wx_schedule_relative_cancel(self):
         app = wx.AppConsole()
-        exit = AppExit(app)
+        quit = AppExit(app)
         scheduler = WxScheduler(wx)
         ran = False
 
@@ -102,30 +118,38 @@ class TestWxScheduler(unittest.TestCase):
             nonlocal ran
             ran = True
 
-        d = scheduler.schedule_relative(0.1, action)
-        d.dispose()
-        exit.Start(200, wx.TIMER_ONE_SHOT)
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
+
+        quit.Start(300, wx.TIMER_ONE_SHOT)
+
         app.MainLoop()
         scheduler.cancel_all()
 
         assert ran is False
 
-    def test_wx_schedule_action_periodic(self):
+    def test_wx_schedule_periodic(self):
         app = wx.AppConsole()
-        exit = AppExit(app)
+        quit = AppExit(app)
         scheduler = WxScheduler(wx)
-        period = 0.05
-        counter = 3
+        times = [scheduler.now]
+        repeat = 3
+        period = 0.1
 
         def action(state):
-            nonlocal counter
             if state:
-                counter -= 1
-                return state - 1
+                times.append(scheduler.now)
+                state -= 1
+            return state
 
-        scheduler.schedule_periodic(period, action, counter)
-        exit.Start(500, wx.TIMER_ONE_SHOT)
+        scheduler.schedule_periodic(period, action, state=repeat)
+
+        quit.Start(300, wx.TIMER_ONE_SHOT)
+
         app.MainLoop()
         scheduler.cancel_all()
 
-        assert counter == 0
+        assert len(times) - 1 == repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25

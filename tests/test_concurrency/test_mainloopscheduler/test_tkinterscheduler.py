@@ -1,108 +1,116 @@
 import pytest
 import unittest
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import sleep
 
 from rx.concurrency.mainloopscheduler import TkinterScheduler
 from rx.internal.basic import default_now
 
 
-tkinter = pytest.importorskip("tkinter")
+skip = False
+tkinter = pytest.importorskip('tkinter')
+if tkinter:
+    try:
+        master = tkinter.Tk()
+        master.wm_withdraw()
+    except Exception:
+        skip = True
 
-try:
-    root = tkinter.Tcl()
-    display = True
-except Exception:
-    display = False
 
-
-@pytest.mark.skipif("display == False")
+@pytest.mark.skipif('skip == True')
 class TestTkinterScheduler(unittest.TestCase):
 
-    def test_tkinter_schedule_now(self):
-        scheduler = TkinterScheduler(root)
-        res = scheduler.now - default_now()
-        assert abs(res) < timedelta(milliseconds=1)
+    def test_tkinter_now(self):
+        scheduler = TkinterScheduler(master)
 
-    def test_qt_schedule_now_units(self):
-        scheduler = TkinterScheduler(root)
-        diff = scheduler.now
+        time1 = scheduler.now
+        assert isinstance(time1, datetime)
+
+        time2 = default_now()
+        diff = (time2 - time1).total_seconds()
+        assert abs(diff) < 0.01
+
+    def test_tkinter_now_units(self):
+        scheduler = TkinterScheduler(master)
+        time1 = scheduler.now
+
         sleep(0.1)
-        diff = scheduler.now - diff
-        assert timedelta(milliseconds=80) < diff < timedelta(milliseconds=180)
 
-    def test_tkinter_schedule_action(self):
-        scheduler = TkinterScheduler(root)
-        ran = False
+        time2 = scheduler.now
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
+
+    def test_tkinter_schedule(self):
+        scheduler = TkinterScheduler(master)
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal ran
-            ran = True
+            nonlocal time2
+            time2 = scheduler.now
 
         scheduler.schedule(action)
 
-        def done():
-            assert ran is True
-            root.quit()
+        master.after_idle(master.quit)
+        master.mainloop()
 
-        root.after_idle(done)
-        root.mainloop()
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert diff < 0.15
 
-    def test_tkinter_schedule_action_due(self):
-        scheduler = TkinterScheduler(root)
-        starttime = default_now()
-        endtime = None
+    def test_tkinter_schedule_relative(self):
+        scheduler = TkinterScheduler(master)
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal endtime
-            endtime = default_now()
+            nonlocal time2
+            time2 = scheduler.now
 
-        scheduler.schedule_relative(0.2, action)
+        scheduler.schedule_relative(0.1, action)
 
-        def done():
-            root.quit()
-            assert endtime is not None
-            diff = endtime - starttime
-            assert diff > timedelta(milliseconds=180)
+        master.after(300, master.quit)
+        master.mainloop()
 
-        root.after(300, done)
-        root.mainloop()
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
 
-    def test_tkinter_schedule_action_cancel(self):
+    def test_tkinter_schedule_relative_cancel(self):
+        scheduler = TkinterScheduler(master)
         ran = False
-        scheduler = TkinterScheduler(root)
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
 
-        d = scheduler.schedule_relative(0.1, action)
-        d.dispose()
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
 
-        def done():
-            root.quit()
-            assert ran is False
+        master.after(300, master.quit)
+        master.mainloop()
 
-        root.after(300, done)
-        root.mainloop()
+        assert ran is False
 
-    def test_tkinter_schedule_action_periodic(self):
-        scheduler = TkinterScheduler(root)
-        period = 0.050
-        counter = 3
+    def test_tkinter_schedule_periodic(self):
+        scheduler = TkinterScheduler(master)
+        times = [scheduler.now]
+        repeat = 3
+        period = 0.1
 
         def action(state):
-            nonlocal counter
             if state:
-                counter -= 1
-                return state - 1
+                times.append(scheduler.now)
+                state -= 1
+            return state
 
-        scheduler.schedule_periodic(period, action, counter)
+        scheduler.schedule_periodic(period, action, state=repeat)
 
-        def done():
-            root.quit()
-            assert counter == 0
+        master.after(600, master.quit)
+        master.mainloop()
 
-        root.after(300, done)
-        root.mainloop()
+        assert len(times) - 1 == repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25

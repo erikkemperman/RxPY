@@ -1,88 +1,97 @@
 import pytest
 import unittest
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import sleep
-
-tornado = pytest.importorskip("tornado")
-from tornado import ioloop
 
 from rx.concurrency.mainloopscheduler import IOLoopScheduler
 
 
+tornado = pytest.importorskip('tornado')
+skip = not tornado
+if not skip:
+    try:
+        from tornado import ioloop
+    except ImportError:
+        skip = True
+
+
+@pytest.mark.skipif('skip == True')
 class TestIOLoopScheduler(unittest.TestCase):
 
-    def test_ioloop_schedule_now(self):
+    def test_ioloop_now(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
-        diff = scheduler.now - datetime.utcfromtimestamp(loop.time())
-        assert abs(diff) < timedelta(milliseconds=1)
 
-    def test_ioloop_schedule_now_units(self):
+        time1 = scheduler.now
+        assert isinstance(time1, datetime)
+
+        time2 = datetime.utcfromtimestamp(loop.time())
+        diff = (time2 - time1).total_seconds()
+        assert abs(diff) < 0.01
+
+    def test_ioloop_now_units(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
-        diff = scheduler.now
+        time1 = scheduler.now
+
         sleep(0.1)
-        diff = scheduler.now - diff
-        assert timedelta(milliseconds=80) < diff < timedelta(milliseconds=180)
 
-    def test_ioloop_schedule_action(self):
+        time2 = scheduler.now
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
+
+    def test_ioloop_schedule(self):
         loop = ioloop.IOLoop.instance()
-
         scheduler = IOLoopScheduler(loop)
-        ran = False
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal ran
-            ran = True
+            nonlocal time2
+            time2 = scheduler.now
 
         scheduler.schedule(action)
 
-        def done():
-            assert ran is True
-            loop.stop()
-
-        loop.call_later(0.1, done)
+        loop.call_later(0.1, loop.stop)
         loop.start()
 
-    def test_ioloop_schedule_action_due(self):
-        loop = ioloop.IOLoop.instance()
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert diff < 0.15
 
+    def test_ioloop_schedule_relative(self):
+        loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
-        starttime = loop.time()
-        endtime = None
+        time1 = scheduler.now
+        time2 = None
 
         def action(scheduler, state):
-            nonlocal endtime
-            endtime = loop.time()
+            nonlocal time2
+            time2 = scheduler.now
 
-        scheduler.schedule_relative(0.2, action)
+        scheduler.schedule_relative(0.1, action)
 
-        def done():
-            assert endtime is not None
-            diff = endtime - starttime
-            assert diff > 0.18
-            loop.stop()
-
-        loop.call_later(0.3, done)
+        loop.call_later(0.3, loop.stop)
         loop.start()
 
-    def test_ioloop_schedule_action_cancel(self):
-        loop = ioloop.IOLoop.instance()
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
 
-        ran = False
+    def test_ioloop_schedule_relative_cancel(self):
+        loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
+        ran = False
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
 
-        d = scheduler.schedule_relative(0.01, action)
-        d.dispose()
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
 
-        def done():
-            assert ran is False
-            loop.stop()
-
-        loop.call_later(0.1, done)
+        loop.call_later(0.3, loop.stop)
         loop.start()
+
+        assert ran is False
