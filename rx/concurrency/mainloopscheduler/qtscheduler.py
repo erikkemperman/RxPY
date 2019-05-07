@@ -116,7 +116,7 @@ class QtScheduler(SchedulerBase):
         log.debug("periodic timeout: %sms", msecs)
 
         timer = self.qtcore.QTimer()
-        timer.setSingleShot(False)
+        timer.setSingleShot(not period)
         timer.timeout.connect(interval)
         timer.setInterval(msecs)
         self._periodic_timers.add(timer)

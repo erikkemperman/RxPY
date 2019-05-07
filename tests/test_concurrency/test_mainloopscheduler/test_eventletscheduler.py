@@ -1,7 +1,7 @@
 import pytest
 import unittest
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import sleep
 
 from rx.concurrency.mainloopscheduler import EventLetEventScheduler
@@ -89,6 +89,40 @@ class TestEventLetEventScheduler(unittest.TestCase):
 
         assert ran is False
 
+    def test_eventlet_schedule_absolute(self):
+        scheduler = EventLetEventScheduler()
+        time1 = scheduler.now
+        time2 = None
+
+        def action(scheduler, state):
+            nonlocal time2
+            time2 = scheduler.now
+
+        duetime = scheduler.now + timedelta(seconds=0.1)
+        scheduler.schedule_absolute(duetime, action)
+
+        eventlet.sleep(0.3)
+
+        assert time2 is not None
+        diff = (time2 - time1).total_seconds()
+        assert 0.05 < diff < 0.25
+
+    def test_eventlet_schedule_absolute_cancel(self):
+        scheduler = EventLetEventScheduler()
+        ran = False
+
+        def action(scheduler, state):
+            nonlocal ran
+            ran = True
+
+        duetime = scheduler.now + timedelta(seconds=0.1)
+        disp = scheduler.schedule_absolute(duetime, action)
+        disp.dispose()
+
+        eventlet.sleep(0.3)
+
+        assert ran is False
+
     def test_eventlet_schedule_periodic(self):
         scheduler = EventLetEventScheduler()
         times = [scheduler.now]
@@ -105,6 +139,30 @@ class TestEventLetEventScheduler(unittest.TestCase):
         eventlet.sleep(0.6)
 
         assert len(times) - 1 == repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25
+
+    def test_eventlet_schedule_periodic_cancel(self):
+        scheduler = EventLetEventScheduler()
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+
+        eventlet.sleep(0.15)
+
+        disp.dispose()
+
+        eventlet.sleep(0.15)
+
+        assert 0 < len(times) - 1 < repeat
         for i in range(len(times) - 1):
             diff = (times[i + 1] - times[i]).total_seconds()
             assert 0.05 < diff < 0.25

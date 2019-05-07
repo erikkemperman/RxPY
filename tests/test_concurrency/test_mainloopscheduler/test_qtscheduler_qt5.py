@@ -9,11 +9,13 @@ from rx.concurrency.mainloopscheduler import QtScheduler
 from rx.internal.basic import default_now
 
 
-skip = False
-try:
-    from PyQt5 import QtCore
-except ImportError:
-    skip = True
+PyQt5 = pytest.importorskip('PyQt5')
+skip = not PyQt5
+if not skip:
+    try:
+        from PyQt5 import QtCore
+    except ImportError:
+        skip = True
 
 app = None  # Prevent garbage collection
 
@@ -101,6 +103,29 @@ class TestQtSchedulerQt5(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
+    def test_qt5_schedule_relative_cancel(self):
+        app = make_app()
+        scheduler = QtScheduler(QtCore)
+        gate = threading.Semaphore(0)
+        ran = False
+
+        def action(scheduler, state):
+            nonlocal ran
+            ran = True
+
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
+
+        def done():
+            app.quit()
+            gate.release()
+
+        QtCore.QTimer.singleShot(300, done)
+        app.exec_()
+
+        gate.acquire()
+        assert ran is False
+
     def test_qt5_schedule_absolute(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
@@ -128,7 +153,7 @@ class TestQtSchedulerQt5(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
-    def test_qt5_schedule_relative_cancel(self):
+    def test_qt5_schedule_absolute_cancel(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
         gate = threading.Semaphore(0)
@@ -138,7 +163,8 @@ class TestQtSchedulerQt5(unittest.TestCase):
             nonlocal ran
             ran = True
 
-        disp = scheduler.schedule_relative(0.1, action)
+        duetime = scheduler.now + timedelta(seconds=0.1)
+        disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
         def done():
@@ -210,3 +236,31 @@ class TestQtSchedulerQt5(unittest.TestCase):
         for i in range(len(times) - 1):
             diff = (times[i + 1] - times[i]).total_seconds()
             assert 0.05 < diff < 0.25
+
+    def test_qt5_schedule_zero(self):
+        app = make_app()
+        scheduler = QtScheduler(QtCore)
+        gate = threading.Semaphore(0)
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        scheduler.schedule_periodic(0.0, action, state=repeat)
+
+        def done():
+            app.quit()
+            gate.release()
+
+        QtCore.QTimer.singleShot(200, done)
+        app.exec_()
+
+        gate.acquire()
+
+        assert len(times) == 2
+        diff = (times[1] - times[0]).total_seconds()
+        assert diff < 0.15

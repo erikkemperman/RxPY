@@ -14,7 +14,7 @@ class GtkScheduler(SchedulerBase):
     """
 
     def _gtk_schedule(self,
-                      time: typing.AbsoluteOrRelativeTime,
+                      time: typing.RelativeTime,
                       action: typing.ScheduledSingleOrPeriodicAction,
                       state: Optional[typing.TState] = None,
                       periodic: bool = False
@@ -40,7 +40,7 @@ class GtkScheduler(SchedulerBase):
             else:
                 sad.disposable = self.invoke_action(action, state=state)
 
-            return periodic
+            return periodic and bool(time)
 
         GLib.timeout_add(msecs, timer_handler, None)
 

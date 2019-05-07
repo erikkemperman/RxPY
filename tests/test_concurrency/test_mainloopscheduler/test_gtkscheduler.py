@@ -102,6 +102,30 @@ class TestGtkScheduler(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
+    def test_gtk_schedule_relative_cancel(self):
+        scheduler = GtkScheduler()
+        gate = threading.Semaphore(0)
+        ran = False
+
+        def action(scheduler, state):
+            nonlocal ran
+            ran = True
+
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
+
+        def done(data):
+            Gtk.main_quit()
+            gate.release()
+            return False
+
+        GLib.timeout_add(200, done, None)
+        Gtk.main()
+
+        gate.acquire()
+
+        assert ran is False
+
     def test_gtk_schedule_absolute(self):
         scheduler = GtkScheduler()
         gate = threading.Semaphore(0)
@@ -129,7 +153,7 @@ class TestGtkScheduler(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
-    def test_gtk_schedule_relative_cancel(self):
+    def test_gtk_schedule_absolute_cancel(self):
         scheduler = GtkScheduler()
         gate = threading.Semaphore(0)
         ran = False
@@ -138,7 +162,8 @@ class TestGtkScheduler(unittest.TestCase):
             nonlocal ran
             ran = True
 
-        disp = scheduler.schedule_relative(0.1, action)
+        duetime = scheduler.now + timedelta(seconds=0.1)
+        disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
         def done(data):
@@ -182,3 +207,66 @@ class TestGtkScheduler(unittest.TestCase):
         for i in range(len(times) - 1):
             diff = (times[i + 1] - times[i]).total_seconds()
             assert 0.05 < diff < 0.25
+
+    def test_gtk_schedule_periodic_cancel(self):
+        scheduler = GtkScheduler()
+        gate = threading.Semaphore(0)
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+
+        def dispose(data):
+            disp.dispose()
+            return False
+
+        GLib.timeout_add(150, dispose, None)
+
+        def done(data):
+            Gtk.main_quit()
+            gate.release()
+            return False
+
+        GLib.timeout_add(150, done, None)
+        Gtk.main()
+
+        gate.acquire()
+
+        assert 0 < len(times) - 1 < repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25
+
+    def test_gtk_schedule_periodic_zero(self):
+        scheduler = GtkScheduler()
+        gate = threading.Semaphore(0)
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        scheduler.schedule_periodic(0.0, action, state=repeat)
+
+        def done(data):
+            Gtk.main_quit()
+            gate.release()
+            return False
+
+        GLib.timeout_add(200, done, None)
+        Gtk.main()
+
+        gate.acquire()
+
+        assert len(times) == 2
+        diff = (times[1] - times[0]).total_seconds()
+        assert diff < 0.15

@@ -70,6 +70,22 @@ class TestPyGameScheduler(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
+    def test_pygame_schedule_relative_cancel(self):
+        scheduler = PyGameScheduler()
+        ran = False
+
+        def action(scheduler, state):
+            nonlocal ran
+            ran = True
+
+        disp = scheduler.schedule_relative(0.1, action)
+        disp.dispose()
+
+        sleep(0.2)
+        scheduler.run()
+
+        assert ran is False
+
     def test_pygame_schedule_absolute(self):
         scheduler = PyGameScheduler()
         time1 = scheduler.now
@@ -92,7 +108,7 @@ class TestPyGameScheduler(unittest.TestCase):
         diff = (time2 - time1).total_seconds()
         assert 0.05 < diff < 0.25
 
-    def test_pygame_schedule_relative_cancel(self):
+    def test_pygame_schedule_absolute_cancel(self):
         scheduler = PyGameScheduler()
         ran = False
 
@@ -100,10 +116,86 @@ class TestPyGameScheduler(unittest.TestCase):
             nonlocal ran
             ran = True
 
-        disp = scheduler.schedule_relative(0.1, action)
+        duetime = scheduler.now + timedelta(seconds=0.1)
+        disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
         sleep(0.2)
         scheduler.run()
 
         assert ran is False
+
+    def test_pygame_schedule_periodic(self):
+        scheduler = PyGameScheduler()
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        scheduler.schedule_periodic(0.1, action, state=repeat)
+
+        stop = scheduler.now + timedelta(seconds=0.6)
+        while scheduler.now < stop:
+            scheduler.run()
+            sleep(0.05)
+
+        assert len(times) - 1 == repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25
+
+    def test_pygame_schedule_periodic_cancel(self):
+        scheduler = PyGameScheduler()
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+
+        stop = scheduler.now + timedelta(seconds=0.15)
+        while scheduler.now < stop:
+            scheduler.run()
+            sleep(0.05)
+
+        disp.dispose()
+
+        stop = scheduler.now + timedelta(seconds=0.15)
+        while scheduler.now < stop:
+            scheduler.run()
+            sleep(0.05)
+
+        assert 0 < len(times) - 1 < repeat
+        for i in range(len(times) - 1):
+            diff = (times[i + 1] - times[i]).total_seconds()
+            assert 0.05 < diff < 0.25
+
+    def test_pygame_schedule_periodic_zero(self):
+        scheduler = PyGameScheduler()
+        times = [scheduler.now]
+        repeat = 3
+
+        def action(state):
+            if state:
+                times.append(scheduler.now)
+                state -= 1
+            return state
+
+        scheduler.schedule_periodic(0.0, action, state=repeat)
+
+        stop = scheduler.now + timedelta(seconds=0.2)
+        while scheduler.now < stop:
+            scheduler.run()
+            sleep(0.05)
+
+        assert len(times) == 2
+        diff = (times[1] - times[0]).total_seconds()
+        assert diff < 0.15
