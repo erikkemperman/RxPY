@@ -5,6 +5,14 @@ import threading
 from datetime import datetime, timedelta
 
 from rx.concurrency.mainloopscheduler import AsyncIOScheduler
+from rx.disposable import SingleAssignmentDisposable
+
+from sys import version_info
+
+if version_info < (3, 8, 0):
+    from asyncio.futures import TimeoutError
+else:
+    from asyncio.exceptions import TimeoutError
 
 
 class TestAsyncIOScheduler(unittest.TestCase):
@@ -37,16 +45,23 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             scheduler.schedule(action)
 
-            yield from asyncio.sleep(0.1, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.1, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -60,19 +75,26 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             def schedule():
                 scheduler.schedule(action)
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.1, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.1, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -86,16 +108,23 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             scheduler.schedule_relative(0.1, action)
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -109,19 +138,26 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             def schedule():
                 scheduler.schedule_relative(0.1, action)
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -135,17 +171,23 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             ran = False
 
             def action(scheduler, state):
                 nonlocal ran
                 ran = True
+                event.set()
 
             disp = scheduler.schedule_relative(0.1, action)
             disp.dispose()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
 
+            assert event.is_set() is False
             assert ran is False
 
         loop.run_until_complete(go())
@@ -156,11 +198,13 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            time = None
+            event = asyncio.Event(loop=loop)
+            ran = False
 
             def action(scheduler, state):
-                nonlocal time
-                time = scheduler.now
+                nonlocal ran
+                ran = True
+                event.set()
 
             def schedule():
                 disp = scheduler.schedule_relative(0.1, action)
@@ -168,9 +212,13 @@ class TestAsyncIOScheduler(unittest.TestCase):
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
 
-            assert time is None
+            assert event.is_set() is False
+            assert ran is False
 
         loop.run_until_complete(go())
 
@@ -180,17 +228,24 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             duetime = scheduler.now + timedelta(seconds=0.1)
             scheduler.schedule_absolute(duetime, action)
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -204,12 +259,14 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
             time1 = scheduler.now
             time2 = None
 
             def action(scheduler, state):
                 nonlocal time2
                 time2 = scheduler.now
+                event.set()
 
             def schedule():
                 duetime = scheduler.now + timedelta(seconds=0.1)
@@ -217,7 +274,12 @@ class TestAsyncIOScheduler(unittest.TestCase):
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert time2 is not None
             diff = (time2 - time1).total_seconds()
@@ -231,18 +293,24 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             ran = False
 
             def action(scheduler, state):
                 nonlocal ran
                 ran = True
+                event.set()
 
             duetime = scheduler.now + timedelta(seconds=0.1)
             disp = scheduler.schedule_absolute(duetime, action)
             disp.dispose()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
 
+            assert event.is_set() is False
             assert ran is False
 
         loop.run_until_complete(go())
@@ -253,11 +321,13 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            time = None
+            event = asyncio.Event(loop=loop)
+            ran = False
 
             def action(scheduler, state):
-                nonlocal time
-                time = scheduler.now
+                nonlocal ran
+                ran = True
+                event.set()
 
             def schedule():
                 duetime = scheduler.now + timedelta(seconds=0.1)
@@ -266,9 +336,13 @@ class TestAsyncIOScheduler(unittest.TestCase):
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.3, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.3, loop=loop)
+            except TimeoutError:
+                pass
 
-            assert time is None
+            assert event.is_set() is False
+            assert ran is False
 
         loop.run_until_complete(go())
 
@@ -278,6 +352,7 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             times = [scheduler.now]
             repeat = 3
 
@@ -285,11 +360,18 @@ class TestAsyncIOScheduler(unittest.TestCase):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
             scheduler.schedule_periodic(0.1, action, state=repeat)
 
-            yield from asyncio.sleep(0.6, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.6, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert len(times) - 1 == repeat
             for i in range(len(times) - 1):
@@ -304,6 +386,7 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
             times = [scheduler.now]
             repeat = 3
 
@@ -311,6 +394,8 @@ class TestAsyncIOScheduler(unittest.TestCase):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
             def schedule():
@@ -318,7 +403,12 @@ class TestAsyncIOScheduler(unittest.TestCase):
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.6, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.6, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is True
 
             assert len(times) - 1 == repeat
             for i in range(len(times) - 1):
@@ -333,6 +423,8 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
+            sad = SingleAssignmentDisposable()
             times = [scheduler.now]
             repeat = 3
 
@@ -340,15 +432,22 @@ class TestAsyncIOScheduler(unittest.TestCase):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
-            disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+            sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
 
             yield from asyncio.sleep(0.15, loop=loop)
 
-            disp.dispose()
+            sad.dispose()
 
-            yield from asyncio.sleep(0.15, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.15, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is False
 
             assert 0 < len(times) - 1 < repeat
             for i in range(len(times) - 1):
@@ -363,30 +462,34 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
+            sad = SingleAssignmentDisposable()
             times = [scheduler.now]
             repeat = 3
-            disp = None
 
             def action(state):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
             def schedule():
-                nonlocal disp
-                disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+                sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
 
             threading.Thread(target=schedule).start()
 
             yield from asyncio.sleep(0.15, loop=loop)
 
-            def dispose():
-                disp.dispose()
+            threading.Thread(target=sad.dispose).start()
 
-            threading.Thread(target=dispose).start()
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.14, loop=loop)
+            except TimeoutError:
+                pass
 
-            yield from asyncio.sleep(0.15, loop=loop)
+            assert event.is_set() is False
 
             assert 0 < len(times) - 1 < repeat
             for i in range(len(times) - 1):
@@ -401,6 +504,7 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=False)
+            event = asyncio.Event(loop=loop)
             times = [scheduler.now]
             repeat = 3
 
@@ -408,11 +512,18 @@ class TestAsyncIOScheduler(unittest.TestCase):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
             scheduler.schedule_periodic(0.0, action, state=repeat)
 
-            yield from asyncio.sleep(0.2, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.2, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is False
 
             assert len(times) == 2
             diff = (times[1] - times[0]).total_seconds()
@@ -426,6 +537,7 @@ class TestAsyncIOScheduler(unittest.TestCase):
         @asyncio.coroutine
         def go():
             scheduler = AsyncIOScheduler(loop, threadsafe=True)
+            event = asyncio.Event(loop=loop)
             times = [scheduler.now]
             repeat = 3
 
@@ -433,6 +545,8 @@ class TestAsyncIOScheduler(unittest.TestCase):
                 if state:
                     times.append(scheduler.now)
                     state -= 1
+                else:
+                    event.set()
                 return state
 
             def schedule():
@@ -440,7 +554,12 @@ class TestAsyncIOScheduler(unittest.TestCase):
 
             threading.Thread(target=schedule).start()
 
-            yield from asyncio.sleep(0.2, loop=loop)
+            try:
+                yield from asyncio.wait_for(event.wait(), 0.2, loop=loop)
+            except TimeoutError:
+                pass
+
+            assert event.is_set() is False
 
             assert len(times) == 2
             diff = (times[1] - times[0]).total_seconds()

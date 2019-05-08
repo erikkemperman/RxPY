@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from time import sleep
 
 from rx.concurrency.mainloopscheduler import TwistedScheduler
-
+from rx.disposable import SingleAssignmentDisposable
 
 twisted = pytest.importorskip('twisted')
 skip = not twisted
@@ -49,15 +49,18 @@ class TestTwistedScheduler(unittest.TestCase):
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            promise.callback(True)
 
         scheduler.schedule(action)
 
-        def done():
-            promise.callback('Done')
+        promise.addTimeout(0.1, reactor)
 
-        reactor.callLater(0.1, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -73,15 +76,18 @@ class TestTwistedScheduler(unittest.TestCase):
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            promise.callback(True)
 
         scheduler.schedule_relative(0.1, action)
 
-        def done():
-            promise.callback('Done')
+        promise.addTimeout(0.3, reactor)
 
-        reactor.callLater(0.3, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -96,16 +102,19 @@ class TestTwistedScheduler(unittest.TestCase):
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            promise.callback(True)
 
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        def done():
-            promise.callback('Done')
+        promise.addTimeout(0.3, reactor)
 
-        reactor.callLater(0.3, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is False
 
         assert ran is False
 
@@ -119,16 +128,19 @@ class TestTwistedScheduler(unittest.TestCase):
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            promise.callback(True)
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        def done():
-            promise.callback('Done')
+        promise.addTimeout(0.3, reactor)
 
-        reactor.callLater(0.3, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -143,6 +155,7 @@ class TestTwistedScheduler(unittest.TestCase):
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            promise.callback(True)
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         disp = scheduler.schedule_absolute(duetime, action)
@@ -151,9 +164,14 @@ class TestTwistedScheduler(unittest.TestCase):
         def done():
             promise.callback('Done')
 
-        reactor.callLater(0.3, done)
+        promise.addTimeout(0.3, reactor)
 
-        yield promise
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
+
+        assert promise.result is False
 
         assert ran is False
 
@@ -161,6 +179,7 @@ class TestTwistedScheduler(unittest.TestCase):
     def test_twisted_schedule_periodic(self):
         scheduler = TwistedScheduler(reactor)
         promise = defer.Deferred()
+        sad = SingleAssignmentDisposable()
         times = [scheduler.now]
         repeat = 3
 
@@ -168,17 +187,21 @@ class TestTwistedScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif promise.called is False:
+                sad.dispose()
+                promise.callback(True)
             return state
 
-        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+        sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
 
-        def done():
-            disp.dispose()
-            promise.callback('Done')
+        promise.addTimeout(0.6, reactor)
 
-        reactor.callLater(0.6, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is True
 
         assert len(times) - 1 == repeat
         for i in range(len(times) - 1):
@@ -190,6 +213,7 @@ class TestTwistedScheduler(unittest.TestCase):
         scheduler = TwistedScheduler(reactor)
         promise1 = defer.Deferred()
         promise2 = defer.Deferred()
+        sad = SingleAssignmentDisposable()
         times = [scheduler.now]
         repeat = 3
 
@@ -197,24 +221,31 @@ class TestTwistedScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif promise2.called is False:
+                sad.dispose()
+                promise2.callback(True)
             return state
 
-        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+        sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
 
         def dispose():
-            disp.dispose()
-            promise1.callback('Done')
+            sad.dispose()
+            promise1.callback(True)
 
         reactor.callLater(0.15, dispose)
 
         yield promise1
 
-        def done():
-            promise2.callback('Done')
+        assert promise1.result is True
 
-        reactor.callLater(0.15, done)
+        promise2.addTimeout(0.15, reactor)
 
-        yield promise2
+        try:
+            yield promise2
+        except defer.TimeoutError:
+            promise2.result = False
+
+        assert promise2.result is False
 
         assert 0 < len(times) - 1 < repeat
         for i in range(len(times) - 1):
@@ -225,6 +256,7 @@ class TestTwistedScheduler(unittest.TestCase):
     def test_twisted_schedule_periodic_zero(self):
         scheduler = TwistedScheduler(reactor)
         promise = defer.Deferred()
+        sad = SingleAssignmentDisposable()
         times = [scheduler.now]
         repeat = 3
 
@@ -232,16 +264,21 @@ class TestTwistedScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif promise.called is False:
+                sad.dispose()
+                promise.callback(True)
             return state
 
-        scheduler.schedule_periodic(0.0, action, state=repeat)
+        sad.disposable = scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        def done():
-            promise.callback('Done')
+        promise.addTimeout(0.6, reactor)
 
-        reactor.callLater(0.2, done)
+        try:
+            yield promise
+        except defer.TimeoutError:
+            promise.result = False
 
-        yield promise
+        assert promise.result is False
 
         assert len(times) == 2
         diff = (times[1] - times[0]).total_seconds()

@@ -5,8 +5,13 @@ from datetime import datetime, timedelta
 
 from rx.concurrency.mainloopscheduler import GEventScheduler
 
-
 gevent = pytest.importorskip('gevent')
+skip = not gevent
+if not skip:
+    try:
+        import gevent.event
+    except ImportError:
+        skip = True
 
 
 class TestGEventScheduler(unittest.TestCase):
@@ -34,16 +39,20 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_gevent_schedule(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         scheduler.schedule(action)
 
-        gevent.sleep(0.1)
+        event.wait(0.1)
+
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -51,16 +60,20 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_gevent_schedule_relative(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         scheduler.schedule_relative(0.1, action)
 
-        gevent.sleep(0.3)
+        event.wait(0.3)
+
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -68,32 +81,40 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_gevent_schedule_relative_cancel(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         ran = False
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            event.set()
 
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        gevent.sleep(0.3)
+        event.wait(0.3)
+
+        assert event.is_set() is False
 
         assert ran is False
 
     def test_gevent_schedule_absolute(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        gevent.sleep(0.3)
+        event.wait(0.3)
+
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -101,22 +122,27 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_gevent_schedule_absolute_cancel(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         ran = False
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        gevent.sleep(0.3)
+        event.wait(0.3)
+
+        assert event.is_set() is False
 
         assert ran is False
 
     def test_eventlet_schedule_periodic(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -124,11 +150,15 @@ class TestGEventScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            else:
+                event.set()
             return state
 
         scheduler.schedule_periodic(0.1, action, state=repeat)
 
-        gevent.sleep(0.6)
+        event.wait(0.6)
+
+        assert event.is_set() is True
 
         assert len(times) - 1 == repeat
         for i in range(len(times) - 1):
@@ -137,6 +167,7 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_eventlet_schedule_periodic_cancel(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -144,6 +175,8 @@ class TestGEventScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            else:
+                event.set()
             return state
 
         disp = scheduler.schedule_periodic(0.1, action, state=repeat)
@@ -152,7 +185,9 @@ class TestGEventScheduler(unittest.TestCase):
 
         disp.dispose()
 
-        gevent.sleep(0.15)
+        event.wait(0.15)
+
+        assert event.is_set() is False
 
         assert 0 < len(times) - 1 < repeat
         for i in range(len(times) - 1):
@@ -161,6 +196,7 @@ class TestGEventScheduler(unittest.TestCase):
 
     def test_eventlet_schedule_periodic_zero(self):
         scheduler = GEventScheduler()
+        event = gevent.event.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -168,11 +204,15 @@ class TestGEventScheduler(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            else:
+                event.set()
             return state
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        gevent.sleep(0.2)
+        event.wait(0.2)
+
+        assert event.is_set() is False
 
         assert len(times) == 2
         diff = (times[1] - times[0]).total_seconds()

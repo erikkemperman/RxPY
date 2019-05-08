@@ -26,7 +26,6 @@ class EventLetEventScheduler(SchedulerBase):
         # Lazy import
         global eventlet
         import eventlet
-        import eventlet.hubs
 
     def schedule(self,
                  action: typing.ScheduledAction,

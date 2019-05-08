@@ -28,6 +28,17 @@ def make_app():
     return app
 
 
+class Quit(QtCore.QThread):
+    def __init__(self, parent, event, timeout):
+        super().__init__(parent)
+        self.event = event
+        self.timeout = timeout
+
+    def run(self):
+        self.event.wait(self.timeout)
+        self.parent().quit()
+
+
 @pytest.mark.skipif('skip == True')
 class TestQtSchedulerQt5(unittest.TestCase):
 
@@ -54,24 +65,21 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         scheduler.schedule(action)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(100, done)
+        Quit(app, event, 0.1).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -80,24 +88,21 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule_relative(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         scheduler.schedule_relative(0.1, action)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(300, done)
+        Quit(app, event, 0.3).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -106,48 +111,43 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule_relative_cancel(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         ran = False
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            event.set()
 
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(300, done)
+        Quit(app, event, 0.3).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is False
+
         assert ran is False
 
     def test_qt5_schedule_absolute(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
 
         def action(scheduler, state):
             nonlocal time2
             time2 = scheduler.now
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(300, done)
+        Quit(app, event, 0.3).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -156,31 +156,29 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule_absolute_cancel(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         ran = False
 
         def action(scheduler, state):
             nonlocal ran
             ran = True
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(300, done)
+        Quit(app, event, 0.3).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is False
+
         assert ran is False
 
     def test_qt5_schedule_periodic(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -188,18 +186,16 @@ class TestQtSchedulerQt5(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif event.is_set() is False:
+                event.set()
             return state
 
         scheduler.schedule_periodic(0.1, action, state=repeat)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(600, done)
+        Quit(app, event, 0.6).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is True
 
         assert len(times) - 1 == repeat
         for i in range(len(times) - 1):
@@ -209,7 +205,7 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule_periodic_cancel(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -217,20 +213,18 @@ class TestQtSchedulerQt5(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif event.is_set() is False:
+                event.set()
             return state
 
         disp = scheduler.schedule_periodic(0.1, action, state=repeat)
 
         QtCore.QTimer.singleShot(150, disp.dispose)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(150, done)
+        Quit(app, event, 0.15).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is False
 
         assert 0 < len(times) - 1 < repeat
         for i in range(len(times) - 1):
@@ -240,7 +234,7 @@ class TestQtSchedulerQt5(unittest.TestCase):
     def test_qt5_schedule_zero(self):
         app = make_app()
         scheduler = QtScheduler(QtCore)
-        gate = threading.Semaphore(0)
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
 
@@ -248,18 +242,16 @@ class TestQtSchedulerQt5(unittest.TestCase):
             if state:
                 times.append(scheduler.now)
                 state -= 1
+            elif event.is_set() is False:
+                event.set()
             return state
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        def done():
-            app.quit()
-            gate.release()
-
-        QtCore.QTimer.singleShot(200, done)
+        Quit(app, event, 0.2).start()
         app.exec_()
 
-        gate.acquire()
+        assert event.is_set() is False
 
         assert len(times) == 2
         diff = (times[1] - times[0]).total_seconds()
