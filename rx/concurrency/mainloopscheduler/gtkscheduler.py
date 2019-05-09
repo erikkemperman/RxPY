@@ -24,29 +24,27 @@ class GtkScheduler(SchedulerBase):
         from gi.repository import GLib
 
         msecs = int(self.to_seconds(time) * 1000.0)
-
         sad = SingleAssignmentDisposable()
-
-        periodic_state = state
-        stopped = False
+        tag = None
 
         def timer_handler(_) -> bool:
-            if stopped:
+            nonlocal state
+            if tag is None:
                 return False
 
             if periodic:
-                nonlocal periodic_state
-                periodic_state = action(periodic_state)
+                state = action(state)
             else:
                 sad.disposable = self.invoke_action(action, state=state)
 
             return periodic and bool(time)
 
-        GLib.timeout_add(msecs, timer_handler, None)
+        tag = GLib.timeout_add(msecs, timer_handler, None)
 
         def dispose() -> None:
-            nonlocal stopped
-            stopped = True
+            nonlocal tag
+            GLib.source_remove(tag)
+            tag = None
 
         return CompositeDisposable(sad, Disposable(dispose))
 
