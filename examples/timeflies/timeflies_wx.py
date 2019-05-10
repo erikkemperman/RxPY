@@ -26,7 +26,8 @@ def main():
     app = wx.App()
     scheduler = WxScheduler(wx)
 
-    app.TopWindow = frame = Frame()
+    frame = Frame()
+    app.SetTopWindow(frame)
     frame.Show()
 
     text = 'TIME FLIES LIKE AN ARROW'

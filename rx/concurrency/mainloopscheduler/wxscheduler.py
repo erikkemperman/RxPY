@@ -1,5 +1,6 @@
 import logging
-from typing import Optional
+import threading
+from typing import Optional, Callable, Dict
 
 from rx.core import typing
 from rx.disposable import CompositeDisposable, Disposable, SingleAssignmentDisposable
@@ -16,13 +17,15 @@ class WxScheduler(SchedulerBase):
     def __init__(self, wx) -> None:
         super().__init__()
         self.wx = wx
-        self._timers = set()
+
+        self._lock: threading.Lock = threading.Lock()
+        self._timers: Dict[int, 'Timer'] = {}
 
         class Timer(wx.Timer):
 
-            def __init__(self, callback) -> None:
-                super(Timer, self).__init__()
-                self.callback = callback
+            def __init__(self, callback: Callable[[], None]) -> None:
+                super().__init__()
+                self.callback: Callable[[], None] = callback
 
             def Notify(self):
                 self.callback()
@@ -35,42 +38,42 @@ class WxScheduler(SchedulerBase):
         Should be called when destroying wx controls to prevent
         accessing dead wx objects in actions that might be pending.
         """
-        for timer in self._timers:
-            timer.Stop()
+        with self._lock:
+            for timer in self._timers.values():
+                timer.Stop()
+            self._timers.clear()
 
     def _wxtimer_schedule(self,
-                          time: typing.AbsoluteOrRelativeTime,
+                          duetime: typing.AbsoluteOrRelativeTime,
                           action: typing.ScheduledSingleOrPeriodicAction,
                           state: Optional[typing.TState] = None,
                           periodic: bool = False
                           ) -> typing.Disposable:
-        scheduler = self
-
+        once = not periodic or not bool(duetime)
         sad = SingleAssignmentDisposable()
+        timer = None
 
         def interval() -> None:
             nonlocal state
-            if periodic:
+            if periodic and sad.is_disposed is False:
                 state = action(state)
             else:
-                sad.disposable = action(scheduler, state)
+                sad.disposable = action(self, state)
 
-        msecs = int(self.to_seconds(time) * 1000.0)
-        if msecs == 0:
-            msecs = 1  # wx.Timer doesn't support zero.
+        msecs = max(1, int(SchedulerBase.to_seconds(duetime) * 1000.0))
 
-        log.debug("timeout: %s", msecs)
+        log.debug('timeout wx: %s', msecs)
 
         timer = self._timer_class(interval)
-        timer.Start(
-            msecs,
-            self.wx.TIMER_CONTINUOUS if periodic else self.wx.TIMER_ONE_SHOT
-        )
-        self._timers.add(timer)
+        started = timer.Start(msecs, oneShot=once)
+        if started:
+            with self._lock:
+                self._timers[timer.GetId()] = timer
 
         def dispose() -> None:
             timer.Stop()
-            self._timers.remove(timer)
+            with self._lock:
+                del self._timers[timer.GetId()]
 
         return CompositeDisposable(sad, Disposable(dispose))
 
@@ -127,7 +130,7 @@ class WxScheduler(SchedulerBase):
         """
 
         duetime = self.to_datetime(duetime)
-        return self._wxtimer_schedule(duetime, action, state=state)
+        return self._wxtimer_schedule(duetime - self.now, action, state=state)
 
     def schedule_periodic(self,
                           period: typing.RelativeTime,
