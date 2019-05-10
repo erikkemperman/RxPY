@@ -6,8 +6,6 @@ matrix:
       dist: xenial
       language: python
       python: 3.6.8
-      services:
-        - xvfb
       script:
         - xvfb-run python3 setup.py test
 
@@ -17,8 +15,6 @@ matrix:
       dist: xenial
       language: python
       python: 3.7.3
-      services:
-        - xvfb
       script:
         - xvfb-run python3 setup.py test
 
@@ -28,8 +24,6 @@ matrix:
       dist: xenial
       language: python
       python: "3.8-dev"
-      services:
-        - xvfb
       script:
         - xvfb-run python3 setup.py test
 
@@ -39,8 +33,6 @@ matrix:
       dist: xenial
       language: python
       python: 3.7.3
-      services:
-        - xvfb
 
       before_install:
         # Native libraries for pycairo / pygobject
