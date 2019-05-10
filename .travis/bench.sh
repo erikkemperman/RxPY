@@ -21,6 +21,7 @@
 # and/or you may find your work is stashed!
 
 testargs="--cache-clear --ignore=tests/test_concurrency"
+
 defref="master"
 rounds=5
 
@@ -103,7 +104,7 @@ do
 
   # Do one warm-up round, which doesn't count toward the average
   echo -n " - Round 0 (warm-up)"
-  sec=$(pytest $testargs | grep -o "passed in .* s")
+  sec=$(PYTEST_ADDOPTS=$testargs python3 setup.py test | grep -o "passed in .* s")
   ret=$?
   echo -n " | $sec"
   if [[ $ret == 0 ]];
@@ -119,7 +120,7 @@ do
   for round in $(seq $rounds)
   do
     echo -n " - Round $round of $rounds"
-    sec=$(pytest $testargs | grep -o "passed in .* s")
+    sec=$(PYTEST_ADDOPTS="$testargs" python3 setup.py test | grep -o "passed in .* s")
     ret=$?
     echo -n " | $sec"
 
@@ -139,3 +140,5 @@ do
     fi
   done
 done
+
+mv setup.cfg.bk setup.cfg
