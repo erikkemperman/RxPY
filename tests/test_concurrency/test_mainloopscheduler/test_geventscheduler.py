@@ -140,7 +140,7 @@ class TestGEventScheduler(unittest.TestCase):
 
         assert ran is False
 
-    def test_eventlet_schedule_periodic(self):
+    def test_gevent_schedule_periodic(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
         times = [scheduler.now]
@@ -165,7 +165,7 @@ class TestGEventScheduler(unittest.TestCase):
             diff = (times[i + 1] - times[i]).total_seconds()
             assert 0.05 < diff < 0.25
 
-    def test_eventlet_schedule_periodic_cancel(self):
+    def test_gevent_schedule_periodic_cancel(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
         times = [scheduler.now]
@@ -194,7 +194,7 @@ class TestGEventScheduler(unittest.TestCase):
             diff = (times[i + 1] - times[i]).total_seconds()
             assert 0.05 < diff < 0.25
 
-    def test_eventlet_schedule_periodic_zero(self):
+    def test_gevent_schedule_periodic_zero(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
         times = [scheduler.now]

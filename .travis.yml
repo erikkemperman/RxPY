@@ -6,6 +6,8 @@ matrix:
       dist: xenial
       language: python
       python: 3.6.8
+      env:
+        - PYTEST_ADDOPTS="--ignore=tests/test_concurrency/test_mainloopscheduler"
       script:
         - xvfb-run python3 setup.py test
 
@@ -15,8 +17,10 @@ matrix:
       dist: xenial
       language: python
       python: 3.7.3
+      env:
+        - PYTEST_ADDOPTS="--ignore=tests/test_concurrency/test_mainloopscheduler"
       script:
-        - xvfb-run python3 setup.py test
+        - python3 setup.py test
 
 
     - name: "Python 3.8-dev on Linux"
@@ -24,8 +28,10 @@ matrix:
       dist: xenial
       language: python
       python: "3.8-dev"
+      env:
+        - PYTEST_ADDOPTS="--ignore=tests/test_concurrency/test_mainloopscheduler"
       script:
-        - xvfb-run python3 setup.py test
+        - python3 setup.py test
 
 
     - name: "Python 3.7 on Linux, with optional dependencies and benchmark"
@@ -33,6 +39,8 @@ matrix:
       dist: xenial
       language: python
       python: 3.7.3
+      service:
+        - xvfb
 
       before_install:
         # Native libraries for pycairo / pygobject
@@ -47,7 +55,7 @@ matrix:
         - pip3 install coveralls
 
       script:
-        - xvfb-run coverage run --source=rx setup.py test && coveralls
+        - xvfb-run -a coverage run --source=rx setup.py test && coveralls
 
       after_success:
         # Run a crude benchmark (unit tests minus concurrency) a couple of times.

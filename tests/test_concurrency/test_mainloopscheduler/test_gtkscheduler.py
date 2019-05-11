@@ -2,6 +2,7 @@ import pytest
 import unittest
 
 import os
+import threading
 from datetime import datetime, timedelta
 from time import sleep
 
@@ -24,6 +25,17 @@ if not skip:
 #   Using GTK+ 2.x and GTK+ 3 in the same process is not supported
 if 'GNOME_DESKTOP_SESSION_ID' in os.environ:
     del os.environ['GNOME_DESKTOP_SESSION_ID']
+
+
+class Wait(threading.Thread):
+    def __init__(self, event, timeout):
+        super().__init__()
+        self.event = event
+        self.timeout = timeout
+
+    def run(self):
+        self.event.wait(self.timeout)
+        Gtk.main_quit()
 
 
 @pytest.mark.skipif('skip == True')
@@ -51,28 +63,21 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
-        tag = None
 
         def action(scheduler, state):
-            nonlocal time2, tag
+            nonlocal time2
             time2 = scheduler.now
-            if tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            event.set()
 
         scheduler.schedule(action)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(100, done, None)
+        Wait(event, 0.1).start()
         Gtk.main()
 
-        assert tag is None
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -80,28 +85,21 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule_relative(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
-        tag = None
 
         def action(scheduler, state):
-            nonlocal time2, tag
+            nonlocal time2
             time2 = scheduler.now
-            if tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            event.set()
 
         scheduler.schedule_relative(0.1, action)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(300, done, None)
+        Wait(event, 0.3).start()
         Gtk.main()
 
-        assert tag is None
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -109,56 +107,42 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule_relative_cancel(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         ran = False
-        tag = None
 
         def action(scheduler, state):
-            nonlocal ran, tag
+            nonlocal ran
             ran = True
-            if tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            event.set()
 
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(200, done, None)
+        Wait(event, 0.3).start()
         Gtk.main()
 
-        assert tag is not None
+        assert event.is_set() is False
 
         assert ran is False
 
     def test_gtk_schedule_absolute(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         time1 = scheduler.now
         time2 = None
-        tag = None
 
         def action(scheduler, state):
-            nonlocal time2, tag
+            nonlocal time2
             time2 = scheduler.now
-            if tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(300, done, None)
+        Wait(event, 0.3).start()
         Gtk.main()
 
-        assert tag is None
+        assert event.is_set() is True
 
         assert time2 is not None
         diff = (time2 - time1).total_seconds()
@@ -166,61 +150,47 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule_absolute_cancel(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         ran = False
-        tag = None
 
         def action(scheduler, state):
-            nonlocal ran, tag
+            nonlocal ran
             ran = True
-            if tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            event.set()
 
         duetime = scheduler.now + timedelta(seconds=0.1)
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(200, done, None)
+        Wait(event, 0.3).start()
         Gtk.main()
 
-        assert tag is not None
+        assert event.is_set() is False
 
         assert ran is False
 
     def test_gtk_schedule_periodic(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
         period = 0.1
-        tag = None
 
         def action(state):
-            nonlocal tag
             if state:
                 times.append(scheduler.now)
                 state -= 1
-            elif tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
+            elif event.is_set() is False:
+                event.set()
 
             return state
 
         scheduler.schedule_periodic(period, action, state=repeat)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(600, done, None)
+        Wait(event, 0.6).start()
         Gtk.main()
 
-        assert tag is None
+        assert event.is_set() is True
 
         assert len(times) - 1 == repeat
         for i in range(len(times) - 1):
@@ -229,20 +199,16 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule_periodic_cancel(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
-        tag = None
 
         def action(state):
-            nonlocal tag
             if state:
                 times.append(scheduler.now)
                 state -= 1
-            elif tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
-
+            elif event.is_set() is False:
+                event.set()
             return state
 
         disp = scheduler.schedule_periodic(0.1, action, state=repeat)
@@ -253,14 +219,10 @@ class TestGtkScheduler(unittest.TestCase):
 
         GLib.timeout_add(150, dispose, None)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(150, done, None)
+        Wait(event, 0.3).start()
         Gtk.main()
 
-        assert tag is not None
+        assert event.is_set() is False
 
         assert 0 < len(times) - 1 < repeat
         for i in range(len(times) - 1):
@@ -269,32 +231,25 @@ class TestGtkScheduler(unittest.TestCase):
 
     def test_gtk_schedule_periodic_zero(self):
         scheduler = GtkScheduler()
+        event = threading.Event()
         times = [scheduler.now]
         repeat = 3
-        tag = None
 
         def action(state):
-            nonlocal tag
             if state:
                 times.append(scheduler.now)
                 state -= 1
-            elif tag is not None:
-                Gtk.main_quit()
-                GLib.source_remove(tag)
-                tag = None
-
+            elif event.is_set() is False:
+                event.set()
             return state
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        def done(data):
-            Gtk.main_quit()
-            return False
-
-        tag = GLib.timeout_add(200, done, None)
+        Wait(event, 0.2).start()
         Gtk.main()
 
-        assert tag is not None
+        assert event.is_set() is False
+
         assert len(times) == 2
         diff = (times[1] - times[0]).total_seconds()
         assert diff < 0.15

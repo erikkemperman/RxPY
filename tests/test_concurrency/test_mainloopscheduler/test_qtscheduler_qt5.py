@@ -29,14 +29,15 @@ def make_app():
 
 
 class Wait(QtCore.QThread):
-    def __init__(self, parent, event, timeout):
-        super().__init__(parent)
+    def __init__(self, app, event, timeout):
+        super().__init__()
+        self.app = app
         self.event = event
         self.timeout = timeout
 
     def run(self):
         self.event.wait(self.timeout)
-        self.parent().quit()
+        self.app.quit()
 
 
 @pytest.mark.skipif('skip == True')
