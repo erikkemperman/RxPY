@@ -11,35 +11,35 @@ from rx.internal.basic import default_now
 
 tkinter = pytest.importorskip('tkinter')
 
-master = None  # Prevent garbage collection
+app = None  # Prevent garbage collection
 
 
-def make_master():
-    global master
-    if master is None:
-        master = tkinter.Tk()
-        master.withdraw()
-    return master
+def make_app():
+    global app
+    if app is None:
+        app = tkinter.Tk()
+        app.withdraw()
+    return app
 
 
-class Quit(threading.Thread):
+class Wait(threading.Thread):
 
-    def __init__(self, master, event, timeout):
+    def __init__(self, app, event, timeout):
         super().__init__()
-        self.master = master
+        self.app = app
         self.event = event
         self.timeout = timeout
 
     def run(self):
         self.event.wait(self.timeout)
-        self.master.quit()
+        self.app.quit()
 
 
 class TestTkinterScheduler(unittest.TestCase):
 
     def test_tkinter_now(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
 
         time1 = scheduler.now
         assert isinstance(time1, datetime)
@@ -49,8 +49,8 @@ class TestTkinterScheduler(unittest.TestCase):
         assert abs(diff) < 0.01
 
     def test_tkinter_now_units(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         time1 = scheduler.now
 
         sleep(0.1)
@@ -60,8 +60,8 @@ class TestTkinterScheduler(unittest.TestCase):
         assert 0.05 < diff < 0.25
 
     def test_tkinter_schedule(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         time1 = scheduler.now
         time2 = None
@@ -73,8 +73,8 @@ class TestTkinterScheduler(unittest.TestCase):
 
         scheduler.schedule(action)
 
-        Quit(master, event, 0.1).start()
-        master.mainloop()
+        Wait(app, event, 0.1).start()
+        app.mainloop()
 
         assert event.is_set() is True
 
@@ -83,8 +83,8 @@ class TestTkinterScheduler(unittest.TestCase):
         assert diff < 0.15
 
     def test_tkinter_schedule_relative(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         time1 = scheduler.now
         time2 = None
@@ -96,8 +96,8 @@ class TestTkinterScheduler(unittest.TestCase):
 
         scheduler.schedule_relative(0.1, action)
 
-        Quit(master, event, 0.3).start()
-        master.mainloop()
+        Wait(app, event, 0.3).start()
+        app.mainloop()
 
         assert event.is_set() is True
 
@@ -106,8 +106,8 @@ class TestTkinterScheduler(unittest.TestCase):
         assert 0.05 < diff < 0.25
 
     def test_tkinter_schedule_relative_cancel(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         ran = False
 
@@ -119,16 +119,16 @@ class TestTkinterScheduler(unittest.TestCase):
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        Quit(master, event, 0.3).start()
-        master.mainloop()
+        Wait(app, event, 0.3).start()
+        app.mainloop()
 
         assert event.is_set() is False
 
         assert ran is False
 
     def test_tkinter_schedule_absolute(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         time1 = scheduler.now
         time2 = None
@@ -141,8 +141,8 @@ class TestTkinterScheduler(unittest.TestCase):
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        Quit(master, event, 0.3).start()
-        master.mainloop()
+        Wait(app, event, 0.3).start()
+        app.mainloop()
 
         assert event.is_set() is True
 
@@ -151,8 +151,8 @@ class TestTkinterScheduler(unittest.TestCase):
         assert 0.05 < diff < 0.25
 
     def test_tkinter_schedule_absolute_cancel(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         ran = False
 
@@ -165,16 +165,16 @@ class TestTkinterScheduler(unittest.TestCase):
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        Quit(master, event, 0.3).start()
-        master.mainloop()
+        Wait(app, event, 0.3).start()
+        app.mainloop()
 
         assert event.is_set() is False
 
         assert ran is False
 
     def test_tkinter_schedule_periodic(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         times = [scheduler.now]
         repeat = 3
@@ -190,8 +190,8 @@ class TestTkinterScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(period, action, state=repeat)
 
-        Quit(master, event, 0.6).start()
-        master.mainloop()
+        Wait(app, event, 0.6).start()
+        app.mainloop()
 
         assert event.is_set() is True
 
@@ -201,8 +201,8 @@ class TestTkinterScheduler(unittest.TestCase):
             assert 0.05 < diff < 0.25
 
     def test_tkinter_schedule_periodic_cancel(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         times = [scheduler.now]
         repeat = 3
@@ -218,9 +218,9 @@ class TestTkinterScheduler(unittest.TestCase):
 
         disp = scheduler.schedule_periodic(period, action, state=repeat)
 
-        master.after(150, disp.dispose)
-        Quit(master, event, 0.15).start()
-        master.mainloop()
+        app.after(150, disp.dispose)
+        Wait(app, event, 0.3).start()
+        app.mainloop()
 
         assert event.is_set() is False
 
@@ -230,8 +230,8 @@ class TestTkinterScheduler(unittest.TestCase):
             assert 0.05 < diff < 0.25
 
     def test_tkinter_schedule_periodic_zero(self):
-        master = make_master()
-        scheduler = TkinterScheduler(master)
+        app = make_app()
+        scheduler = TkinterScheduler(app)
         event = threading.Event()
         times = [scheduler.now]
         repeat = 3
@@ -246,8 +246,8 @@ class TestTkinterScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        Quit(master, event, 0.2).start()
-        master.mainloop()
+        Wait(app, event, 0.2).start()
+        app.mainloop()
 
         assert event.is_set() is False
 

@@ -14,19 +14,17 @@ wx = pytest.importorskip('wx')
 app = None  # Prevent garbage collection
 
 
-class Quit(wx.Timer):
+class Wait(threading.Thread):
+
     def __init__(self, app, event, timeout):
         super().__init__()
         self.app = app
         self.event = event
         self.timeout = timeout
-        self.stop = default_now() + timedelta(seconds=timeout)
 
-    def Notify(self):
-        print('test')
-        if self.event.is_set() or default_now() >= self.stop:
-            self.app.ExitMainLoop()
-            self.Stop()
+    def run(self):
+        self.event.wait(self.timeout)
+        self.app.ExitMainLoop()
 
 
 def make_app():
@@ -72,12 +70,7 @@ class TestWxScheduler(unittest.TestCase):
 
         scheduler.schedule(action)
 
-        def wait():
-            event.wait(0.1)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.1).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -101,12 +94,7 @@ class TestWxScheduler(unittest.TestCase):
 
         scheduler.schedule_relative(0.1, action)
 
-        def wait():
-            event.wait(0.3)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.3).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -130,12 +118,7 @@ class TestWxScheduler(unittest.TestCase):
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        def wait():
-            event.wait(0.3)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.3).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -158,12 +141,7 @@ class TestWxScheduler(unittest.TestCase):
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        def wait():
-            event.wait(0.3)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.3).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -188,12 +166,7 @@ class TestWxScheduler(unittest.TestCase):
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        def wait():
-            event.wait(0.3)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.3).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -219,12 +192,7 @@ class TestWxScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(period, action, state=repeat)
 
-        def wait():
-            event.wait(0.6)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.6).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -255,14 +223,8 @@ class TestWxScheduler(unittest.TestCase):
 
         sad.disposable = scheduler.schedule_periodic(period, action, state=repeat)
 
-        def wait():
-            sleep(0.15)
-            sad.dispose()
-            event.wait(0.15)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        wx.CallLater(150, sad.dispose)
+        Wait(app, event, 0.3).start()
         app.MainLoop()
         scheduler.cancel_all()
 
@@ -290,12 +252,7 @@ class TestWxScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        def wait():
-            event.wait(0.2)
-            app.ExitMainLoop()
-
-        threading.Thread(target=wait).start()
-
+        Wait(app, event, 0.2).start()
         app.MainLoop()
         scheduler.cancel_all()
 

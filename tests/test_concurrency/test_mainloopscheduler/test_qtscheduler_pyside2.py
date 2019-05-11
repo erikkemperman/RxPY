@@ -28,7 +28,7 @@ def make_app():
     return app
 
 
-class Quit(QtCore.QThread):
+class Wait(QtCore.QThread):
     def __init__(self, parent, event, timeout):
         super().__init__(parent)
         self.event = event
@@ -76,7 +76,7 @@ class TestQtScheduler(unittest.TestCase):
 
         scheduler.schedule(action)
 
-        Quit(app, event, 0.1).start()
+        Wait(app, event, 0.1).start()
         app.exec_()
 
         assert event.is_set() is True
@@ -99,7 +99,7 @@ class TestQtScheduler(unittest.TestCase):
 
         scheduler.schedule_relative(0.1, action)
 
-        Quit(app, event, 0.3).start()
+        Wait(app, event, 0.3).start()
         app.exec_()
 
         assert event.is_set() is True
@@ -122,7 +122,7 @@ class TestQtScheduler(unittest.TestCase):
         disp = scheduler.schedule_relative(0.1, action)
         disp.dispose()
 
-        Quit(app, event, 0.3).start()
+        Wait(app, event, 0.3).start()
         app.exec_()
 
         assert event.is_set() is False
@@ -144,7 +144,7 @@ class TestQtScheduler(unittest.TestCase):
         duetime = scheduler.now + timedelta(seconds=0.1)
         scheduler.schedule_absolute(duetime, action)
 
-        Quit(app, event, 0.3).start()
+        Wait(app, event, 0.3).start()
         app.exec_()
 
         assert event.is_set() is True
@@ -168,7 +168,7 @@ class TestQtScheduler(unittest.TestCase):
         disp = scheduler.schedule_absolute(duetime, action)
         disp.dispose()
 
-        Quit(app, event, 0.3).start()
+        Wait(app, event, 0.3).start()
         app.exec_()
 
         assert event.is_set() is False
@@ -192,7 +192,7 @@ class TestQtScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(0.1, action, state=repeat)
 
-        Quit(app, event, 0.6).start()
+        Wait(app, event, 0.6).start()
         app.exec_()
 
         assert event.is_set() is True
@@ -221,7 +221,7 @@ class TestQtScheduler(unittest.TestCase):
 
         QtCore.QTimer.singleShot(150, disp.dispose)
 
-        Quit(app, event, 0.15).start()
+        Wait(app, event, 0.3).start()
         app.exec_()
         
         assert event.is_set() is False
@@ -248,7 +248,7 @@ class TestQtScheduler(unittest.TestCase):
 
         scheduler.schedule_periodic(0.0, action, state=repeat)
 
-        Quit(app, event, 0.2).start()
+        Wait(app, event, 0.2).start()
         app.exec_()
 
         assert event.is_set() is False
