@@ -2,10 +2,11 @@ import pytest
 import unittest
 
 from datetime import datetime, timedelta
+from threading import current_thread
 from time import sleep
 
 from rx.concurrency.mainloopscheduler import IOLoopScheduler
-
+from rx.testing import SchedulerHistory
 
 tornado = pytest.importorskip('tornado')
 skip = not tornado
@@ -16,6 +17,14 @@ if not skip:
         from tornado import util
     except ImportError:
         skip = True
+
+
+delay = 0.05
+grace = 0.10
+repeat = 3
+timeout_single = delay + grace
+timeout_period = repeat * delay + grace
+state = 0xdeadbeef
 
 
 async def wait(loop, event, timeout):
@@ -55,192 +64,159 @@ class TestIOLoopScheduler(unittest.TestCase):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule(action)
+        scheduler.schedule(action, state=state)
 
-        loop.call_later(0.0, wait, loop, event, 0.1)
+        loop.call_later(0.0, wait, loop, event, grace)
         loop.start()
 
-        assert event.is_set() is True
-
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
 
     def test_ioloop_schedule_relative(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule_relative(0.1, action)
+        scheduler.schedule_relative(delay, action, state=state)
 
-        loop.call_later(0.0, wait, loop, event, 0.3)
+        loop.call_later(0.0, wait, loop, event, timeout_single)
         loop.start()
 
-        assert event.is_set() is True
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
-
-    def test_ioloop_schedule_relative_cancel(self):
+    def test_ioloop_schedule_relative_dispose(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        ran = False
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        disp = scheduler.schedule_relative(0.1, action)
-        disp.dispose()
+        disposable = scheduler.schedule_relative(delay, action, state=state)
+        disposable.dispose()
 
-        loop.call_later(0.0, wait, loop, event, 0.3)
+        loop.call_later(0.0, wait, loop, event, timeout_single)
         loop.start()
 
-        assert event.is_set() is False
-
-        assert ran is False
+        assert len(history) == 0
 
     def test_ioloop_schedule_absolute(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        scheduler.schedule_absolute(duetime, action)
+        duetime = scheduler.now + timedelta(seconds=delay)
+        scheduler.schedule_absolute(duetime, action, state=state)
 
-        loop.call_later(0.0, wait, loop, event, 0.3)
+        loop.call_later(0.0, wait, loop, event, timeout_single)
         loop.start()
 
-        assert event.is_set() is True
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
-
-    def test_ioloop_schedule_absolute_cancel(self):
+    def test_ioloop_schedule_absolute_dispose(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        ran = False
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        disp = scheduler.schedule_absolute(duetime, action)
-        disp.dispose()
+        duetime = scheduler.now + timedelta(seconds=delay)
+        disposable = scheduler.schedule_absolute(duetime, action, state=state)
+        disposable.dispose()
 
-        loop.call_later(0.0, wait, loop, event, 0.3)
+        loop.call_later(0.0, wait, loop, event, timeout_single)
         loop.start()
 
-        assert event.is_set() is False
-
-        assert ran is False
+        assert len(history) == 0
 
     def test_ioloop_schedule_periodic(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif event.is_set() is False:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        scheduler.schedule_periodic(0.1, action, state=repeat)
+        scheduler.schedule_periodic(delay, action, state=0)
 
-        loop.call_later(0.0, wait, loop, event, 0.6)
+        loop.call_later(0.0, wait, loop, event, timeout_period)
         loop.start()
 
-        assert event.is_set() is True
+        assert len(history) == repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert len(times) - 1 == repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
-
-    def test_ioloop_schedule_periodic_cancel(self):
+    def test_ioloop_schedule_periodic_dispose(self):
         loop = ioloop.IOLoop.instance()
         scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif event.is_set() is False:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+        disposable = scheduler.schedule_periodic(delay, action, state=0)
 
-        loop.call_later(0.15, disp.dispose)
-        loop.call_later(0.15, wait, loop, event, 0.15)
+        loop.call_later(timeout_period / 2, disposable.dispose)
+        loop.call_later(0.0, wait, loop, event, timeout_period )
         loop.start()
 
-        assert event.is_set() is False
-
-        assert 0 < len(times) - 1 < repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
+        assert 0 < len(history) < repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_ioloop_schedule_periodic_zero(self):
         loop = ioloop.IOLoop.instance()
-        scheduler = IOLoopScheduler()
+        scheduler = IOLoopScheduler(loop)
         event = locks.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif event.is_set() is False:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        scheduler.schedule_periodic(0.0, action, state=repeat)
+        scheduler.schedule_periodic(0.0, action, state=0)
 
-        loop.call_later(0.0, wait, loop, event, 0.2)
+        loop.call_later(0.0, wait, loop, event, grace)
         loop.start()
 
-        assert event.is_set() is False
-
-        assert len(times) == 2
-        diff = (times[1] - times[0]).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is None
+        assert call.state == 0
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2

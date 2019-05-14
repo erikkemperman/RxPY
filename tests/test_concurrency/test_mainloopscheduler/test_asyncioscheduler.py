@@ -7,12 +7,21 @@ from threading import current_thread, Thread
 
 from rx.concurrency.mainloopscheduler import AsyncIOScheduler
 from rx.disposable import SingleAssignmentDisposable
+from rx.testing import SchedulerHistory
 
 
 if version_info < (3, 8, 0):
     from asyncio.futures import TimeoutError
 else:
     from asyncio.exceptions import TimeoutError
+
+
+delay = 0.05
+grace = 0.10
+repeat = 3
+timeout_single = delay + grace
+timeout_period = repeat * delay + grace
+state = 0xdeadbeef
 
 
 async def wait(loop, event, timeout):
@@ -40,445 +49,402 @@ class TestAsyncIOScheduler(unittest.TestCase):
         scheduler = AsyncIOScheduler(loop)
         time1 = scheduler.now
 
-        yield from asyncio.sleep(0.05, loop=loop)
+        yield from asyncio.sleep(0.1, loop=loop)
 
         time2 = scheduler.now
         diff = (time2 - time1).total_seconds()
-        assert diff < 0.10
+        assert 0.05 < diff < 0.25
 
     def test_asyncio_schedule(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
+            scheduler.schedule(action, state=state)
 
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
-            scheduler.schedule(action)
-
-            yield from wait(loop, event, 0.05)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert diff < 0.10
-
+            yield from wait(loop, event, grace)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
 
     def test_asyncio_schedule_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
             def schedule():
-                scheduler.schedule(action)
-
+                scheduler.schedule(action, state=state)
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.05)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert diff < 0.10
+            yield from wait(loop, event, grace)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
 
     def test_asyncio_schedule_relative(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
+            scheduler.schedule_relative(delay, action, state=state)
 
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
-            scheduler.schedule_relative(0.05, action)
-
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_asyncio_schedule_relative_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
             def schedule():
-                scheduler.schedule_relative(0.05, action)
-
+                scheduler.schedule_relative(delay, action, state=state)
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_relative_cancel(self):
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
+
+    def test_asyncio_schedule_relative_dispose(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
+            disposable = scheduler.schedule_relative(delay, action, state=state)
+            disposable.dispose()
 
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
-            disp = scheduler.schedule_relative(0.05, action)
-            disp.dispose()
-
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 1
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_relative_cancel_threadsafe(self):
+        assert len(history) == 0
+
+    def test_asyncio_schedule_relative_dispose_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
             def schedule():
-                disp = scheduler.schedule_relative(0.05, action)
-                disp.dispose()
-
+                disposable = scheduler.schedule_relative(delay, action, state=state)
+                disposable.dispose()
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 1
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 0
 
     def test_asyncio_schedule_absolute(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
+            duetime = scheduler.now + timedelta(seconds=delay)
+            scheduler.schedule_absolute(duetime, action, state=state)
 
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
-            duetime = scheduler.now + timedelta(seconds=0.05)
-            scheduler.schedule_absolute(duetime, action)
-
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_asyncio_schedule_absolute_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
             def schedule():
-                duetime = scheduler.now + timedelta(seconds=0.05)
-                scheduler.schedule_absolute(duetime, action)
-
+                duetime = scheduler.now + timedelta(seconds=delay)
+                scheduler.schedule_absolute(duetime, action, state=state)
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_absolute_cancel(self):
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
+
+    def test_asyncio_schedule_absolute_dispose(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
+            duetime = scheduler.now + timedelta(seconds=delay)
+            disposable = scheduler.schedule_absolute(duetime, action, state=state)
+            disposable.dispose()
 
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
-            duetime = scheduler.now + timedelta(seconds=0.05)
-            disp = scheduler.schedule_absolute(duetime, action)
-            disp.dispose()
-
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 1
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_absolute_cancel_threadsafe(self):
+        assert len(history) == 0
+
+    def test_asyncio_schedule_absolute_dispose_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-
-            def action(scheduler, state):
-                times.append(scheduler.now)
-                event.set()
-
             def schedule():
-                duetime = scheduler.now + timedelta(seconds=0.05)
-                disp = scheduler.schedule_absolute(duetime, action)
-                disp.dispose()
-
+                duetime = scheduler.now + timedelta(seconds=delay)
+                disposable = scheduler.schedule_absolute(duetime, action, state=state)
+                disposable.dispose()
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) is 1
+            yield from wait(loop, event, timeout_single)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 0
 
     def test_asyncio_schedule_periodic(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-            repeat = 3
-
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
-
-            scheduler.schedule_periodic(0.05, action, state=repeat)
-
-            yield from wait(loop, event, 0.30)
-
-            assert len(times) - 1 == repeat
-            for i in range(len(times) - 1):
-                diff = (times[i + 1] - times[i]).total_seconds()
-                assert 0.05 < diff < 0.15
+            scheduler.schedule_periodic(delay, action, state=0)
+            yield from wait(loop, event, timeout_period)
 
         loop.run_until_complete(go())
+
+        assert len(history) == repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_asyncio_schedule_periodic_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-            repeat = 3
-
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
-
             def schedule():
-                scheduler.schedule_periodic(0.05, action, state=repeat)
-
+                scheduler.schedule_periodic(delay, action, state=0)
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.3)
-
-            assert len(times) - 1 == repeat
-            for i in range(len(times) - 1):
-                diff = (times[i + 1] - times[i]).total_seconds()
-                assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_period)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_periodic_cancel(self):
+        assert len(history) == repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
+
+    def test_asyncio_schedule_periodic_dispose(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
+            disposable = scheduler.schedule_periodic(delay, action, state=0)
+            yield from asyncio.sleep(timeout_period / 2, loop=loop)
+
+            disposable.dispose()
+            yield from wait(loop, event, timeout_period / 2)
+
+        loop.run_until_complete(go())
+
+        assert 0 < len(history) < repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
+
+    def test_asyncio_schedule_periodic_dispose_threadsafe(self):
+        loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
+
+        @asyncio.coroutine
+        def go():
             sad = SingleAssignmentDisposable()
-            times = [scheduler.now]
-            repeat = 3
+            
+            def schedule():
+                sad.disposable = scheduler.schedule_periodic(delay, action, state=0)
+            Thread(target=schedule).start()
 
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
+            yield from asyncio.sleep(timeout_period / 2, loop=loop)
 
-            sad.disposable = scheduler.schedule_periodic(0.05, action, state=repeat)
-
-            yield from asyncio.sleep(0.10, loop=loop)
+            def dispose():
+                sad.dispose()
+            Thread(target=dispose).start()
 
             sad.dispose()
 
-            yield from wait(loop, event, 0.10)
-
-            assert 0 < len(times) - 1 < repeat
-            for i in range(len(times) - 1):
-                diff = (times[i + 1] - times[i]).total_seconds()
-                assert 0.05 < diff < 0.15
+            yield from wait(loop, event, timeout_period / 2)
 
         loop.run_until_complete(go())
 
-    def test_asyncio_schedule_periodic_cancel_threadsafe(self):
-        loop = asyncio.get_event_loop()
-
-        @asyncio.coroutine
-        def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            sad = SingleAssignmentDisposable()
-            times = [scheduler.now]
-            repeat = 3
-
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
-
-            def schedule():
-                sad.disposable = scheduler.schedule_periodic(0.05, action, state=repeat)
-
-            Thread(target=schedule).start()
-
-            yield from asyncio.sleep(0.10, loop=loop)
-
-            Thread(target=sad.dispose).start()
-
-            yield from wait(loop, event, 0.10)
-
-            assert 0 < len(times) - 1 < repeat
-            for i in range(len(times) - 1):
-                diff = (times[i + 1] - times[i]).total_seconds()
-                assert 0.05 < diff < 0.15
-
-        loop.run_until_complete(go())
+        assert 0 < len(history) < repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_asyncio_schedule_periodic_zero(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=False)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=False)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-            repeat = 3
-
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
-
-            scheduler.schedule_periodic(0.0, action, state=repeat)
-
-            yield from wait(loop, event, 0.1)
-
-            assert len(times) == 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert diff < 0.10
+            scheduler.schedule_periodic(0.0, action, state=0)
+            yield from wait(loop, event, grace)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert call.time_diff <= grace / 2
 
     def test_asyncio_schedule_periodic_zero_threadsafe(self):
         loop = asyncio.get_event_loop()
+        scheduler = AsyncIOScheduler(loop, threadsafe=True)
+        event = asyncio.Event(loop=loop)
+        thread_id = current_thread().ident
+
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
         @asyncio.coroutine
         def go():
-            scheduler = AsyncIOScheduler(loop, threadsafe=True)
-            event = asyncio.Event(loop=loop)
-            times = [scheduler.now]
-            repeat = 3
-
-            def action(state):
-                if state:
-                    times.append(scheduler.now)
-                    state -= 1
-                else:
-                    event.set()
-                return state
-
             def schedule():
-                scheduler.schedule_periodic(0.0, action, state=repeat)
-
+                scheduler.schedule_periodic(0.0, action, state=0)
             Thread(target=schedule).start()
 
-            yield from wait(loop, event, 0.10)
-
-            assert len(times) == 2
-            diff = (times[1] - times[0]).total_seconds()
-            assert diff < 0.10
+            yield from wait(loop, event, grace)
 
         loop.run_until_complete(go())
+
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is None
+        assert call.state == 0
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2

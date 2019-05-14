@@ -1,10 +1,12 @@
 import pytest
 
 from datetime import datetime, timedelta
+from threading import current_thread
 from time import sleep
 
 from rx.concurrency.mainloopscheduler import TwistedScheduler
 from rx.disposable import SingleAssignmentDisposable
+from rx.testing import SchedulerHistory
 
 twisted = pytest.importorskip('twisted')
 skip = not twisted
@@ -14,6 +16,27 @@ if not skip:
         from twisted.trial import unittest
     except ImportError:
         skip = True
+
+
+delay = 0.05
+grace = 0.10
+repeat = 3
+timeout_single = delay + grace
+timeout_period = repeat * delay + grace
+state = 0xdeadbeef
+
+
+class Event(defer.Deferred):
+    def set(self):
+        self.callback(None)
+
+
+def wait(event, timeout):
+    event.addTimeout(timeout, reactor)
+    try:
+        yield event
+    except defer.TimeoutError:
+        pass
 
 
 @pytest.mark.skipif('skip == True')
@@ -42,244 +65,155 @@ class TestTwistedScheduler(unittest.TestCase):
     @defer.inlineCallbacks
     def test_twisted_schedule(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        time1 = scheduler.now
-        time2 = None
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            promise.callback(True)
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule(action)
+        scheduler.schedule(action, state=state)
 
-        promise.addTimeout(0.1, reactor)
+        yield from wait(event, grace)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is True
-
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
 
     @defer.inlineCallbacks
     def test_twisted_schedule_relative(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        time1 = scheduler.now
-        time2 = None
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            promise.callback(True)
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule_relative(0.1, action)
+        scheduler.schedule_relative(delay, action, state=state)
 
-        promise.addTimeout(0.3, reactor)
+        yield from wait(event, timeout_single)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is True
-
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
     @defer.inlineCallbacks
-    def test_twisted_schedule_relative_cancel(self):
+    def test_twisted_schedule_relative_dispose(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        ran = False
+        event = Event()
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            promise.callback(True)
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        disp = scheduler.schedule_relative(0.1, action)
-        disp.dispose()
+        disposable = scheduler.schedule_relative(delay, action, state=state)
+        disposable.dispose()
 
-        promise.addTimeout(0.3, reactor)
+        yield from wait(event, timeout_single)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is False
-
-        assert ran is False
+        assert len(history) == 0
 
     @defer.inlineCallbacks
     def test_twisted_schedule_absolute(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        time1 = scheduler.now
-        time2 = None
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            promise.callback(True)
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        scheduler.schedule_absolute(duetime, action)
+        duetime = scheduler.now + timedelta(seconds=delay)
+        scheduler.schedule_absolute(duetime, action, state=state)
 
-        promise.addTimeout(0.3, reactor)
+        yield from wait(event, timeout_single)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is True
-
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
     @defer.inlineCallbacks
-    def test_twisted_schedule_absolute_cancel(self):
+    def test_twisted_schedule_absolute_dispose(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        ran = False
+        event = Event()
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            promise.callback(True)
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        disp = scheduler.schedule_absolute(duetime, action)
-        disp.dispose()
+        duetime = scheduler.now + timedelta(seconds=delay)
+        disposable = scheduler.schedule_absolute(duetime, action, state=state)
+        disposable.dispose()
 
-        def done():
-            promise.callback('Done')
+        yield from wait(event, timeout_single)
 
-        promise.addTimeout(0.3, reactor)
-
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is False
-
-        assert ran is False
+        assert len(history) == 0
 
     @defer.inlineCallbacks
     def test_twisted_schedule_periodic(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        sad = SingleAssignmentDisposable()
-        times = [scheduler.now]
-        repeat = 3
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif promise.called is False:
-                sad.dispose()
-                promise.callback(True)
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
+        disposable = scheduler.schedule_periodic(delay, action, state=0)
 
-        promise.addTimeout(0.6, reactor)
+        yield from wait(event, timeout_period)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
+        disposable.dispose()  # Otherwise reactor complains about being unclean
 
-        assert promise.result is True
-
-        assert len(times) - 1 == repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
+        assert len(history) == repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     @defer.inlineCallbacks
-    def test_twisted_schedule_periodic_cancel(self):
+    def test_twisted_schedule_periodic_dispose(self):
         scheduler = TwistedScheduler(reactor)
-        promise1 = defer.Deferred()
-        promise2 = defer.Deferred()
-        sad = SingleAssignmentDisposable()
-        times = [scheduler.now]
-        repeat = 3
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif promise2.called is False:
-                sad.dispose()
-                promise2.callback(True)
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        sad.disposable = scheduler.schedule_periodic(0.1, action, state=repeat)
+        disposable = scheduler.schedule_periodic(delay, action, state=0)
 
-        def dispose():
-            sad.dispose()
-            promise1.callback(True)
+        reactor.callLater(timeout_period / 2, disposable.dispose)
 
-        reactor.callLater(0.15, dispose)
+        yield from wait(event, timeout_period)
 
-        yield promise1
-
-        assert promise1.result is True
-
-        promise2.addTimeout(0.15, reactor)
-
-        try:
-            yield promise2
-        except defer.TimeoutError:
-            promise2.result = False
-
-        assert promise2.result is False
-
-        assert 0 < len(times) - 1 < repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
+        assert 0 < len(history) < repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     @defer.inlineCallbacks
     def test_twisted_schedule_periodic_zero(self):
         scheduler = TwistedScheduler(reactor)
-        promise = defer.Deferred()
-        sad = SingleAssignmentDisposable()
-        times = [scheduler.now]
-        repeat = 3
+        event = Event()
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            elif promise.called is False:
-                sad.dispose()
-                promise.callback(True)
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        sad.disposable = scheduler.schedule_periodic(0.0, action, state=repeat)
+        scheduler.schedule_periodic(0.0, action, state=0)
 
-        promise.addTimeout(0.6, reactor)
+        yield from wait(event, grace)
 
-        try:
-            yield promise
-        except defer.TimeoutError:
-            promise.result = False
-
-        assert promise.result is False
-
-        assert len(times) == 2
-        diff = (times[1] - times[0]).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is None
+        assert call.state == 0
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2

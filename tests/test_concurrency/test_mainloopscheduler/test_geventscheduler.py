@@ -2,8 +2,10 @@ import pytest
 import unittest
 
 from datetime import datetime, timedelta
+from threading import current_thread
 
 from rx.concurrency.mainloopscheduler import GEventScheduler
+from rx.testing import SchedulerHistory
 
 gevent = pytest.importorskip('gevent')
 skip = not gevent
@@ -12,6 +14,14 @@ if not skip:
         import gevent.event
     except ImportError:
         skip = True
+
+
+delay = 0.05
+grace = 0.10
+repeat = 3
+timeout_single = delay + grace
+timeout_period = repeat * delay + grace
+state = 0xdeadbeef
 
 
 class TestGEventScheduler(unittest.TestCase):
@@ -40,180 +50,147 @@ class TestGEventScheduler(unittest.TestCase):
     def test_gevent_schedule(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule(action)
+        scheduler.schedule(action, state=state)
 
-        event.wait(0.1)
+        event.wait(grace)
 
-        assert event.is_set() is True
-
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
 
     def test_gevent_schedule_relative(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        scheduler.schedule_relative(0.1, action)
+        scheduler.schedule_relative(delay, action, state=state)
 
-        event.wait(0.3)
+        event.wait(timeout_single)
 
-        assert event.is_set() is True
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
-
-    def test_gevent_schedule_relative_cancel(self):
+    def test_gevent_schedule_relative_dispose(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        ran = False
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        disp = scheduler.schedule_relative(0.1, action)
-        disp.dispose()
+        disposable = scheduler.schedule_relative(delay, action, state=state)
+        disposable.dispose()
 
-        event.wait(0.3)
+        event.wait(timeout_single)
 
-        assert event.is_set() is False
-
-        assert ran is False
+        assert len(history) == 0
 
     def test_gevent_schedule_absolute(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        time1 = scheduler.now
-        time2 = None
+        thread_id = current_thread().ident
 
-        def action(scheduler, state):
-            nonlocal time2
-            time2 = scheduler.now
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        scheduler.schedule_absolute(duetime, action)
+        duetime = scheduler.now + timedelta(seconds=delay)
+        scheduler.schedule_absolute(duetime, action, state=state)
 
-        event.wait(0.3)
+        event.wait(timeout_single)
 
-        assert event.is_set() is True
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is scheduler
+        assert call.state == state
+        assert call.thread_id == thread_id
+        assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert time2 is not None
-        diff = (time2 - time1).total_seconds()
-        assert 0.05 < diff < 0.25
-
-    def test_gevent_schedule_absolute_cancel(self):
+    def test_gevent_schedule_absolute_dispose(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        ran = False
 
-        def action(scheduler, state):
-            nonlocal ran
-            ran = True
-            event.set()
+        history = SchedulerHistory(scheduler)
+        action = history.make_action(event.set)
 
-        duetime = scheduler.now + timedelta(seconds=0.1)
-        disp = scheduler.schedule_absolute(duetime, action)
-        disp.dispose()
+        duetime = scheduler.now + timedelta(seconds=delay)
+        disposable = scheduler.schedule_absolute(duetime, action, state=state)
+        disposable.dispose()
 
-        event.wait(0.3)
+        event.wait(timeout_single)
 
-        assert event.is_set() is False
-
-        assert ran is False
+        assert len(history) == 0
 
     def test_gevent_schedule_periodic(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            else:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        scheduler.schedule_periodic(0.1, action, state=repeat)
+        scheduler.schedule_periodic(delay, action, state=0)
 
-        event.wait(0.6)
+        event.wait(timeout_period)
 
-        assert event.is_set() is True
+        assert len(history) == repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
-        assert len(times) - 1 == repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
-
-    def test_gevent_schedule_periodic_cancel(self):
+    def test_gevent_schedule_periodic_dispose(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            else:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        disp = scheduler.schedule_periodic(0.1, action, state=repeat)
+        disposable = scheduler.schedule_periodic(delay, action, state=0)
 
-        gevent.sleep(0.15)
+        gevent.sleep(timeout_period / 2)
 
-        disp.dispose()
+        disposable.dispose()
 
-        event.wait(0.15)
+        event.wait(timeout_period / 2)
 
-        assert event.is_set() is False
-
-        assert 0 < len(times) - 1 < repeat
-        for i in range(len(times) - 1):
-            diff = (times[i + 1] - times[i]).total_seconds()
-            assert 0.05 < diff < 0.25
+        assert 0 < len(history) < repeat
+        for i, call in enumerate(history):
+            assert call.scheduler is None
+            assert call.state == i
+            assert call.thread_id == thread_id
+            assert delay / 2 <= call.time_diff <= 2 * delay
 
     def test_gevent_schedule_periodic_zero(self):
         scheduler = GEventScheduler()
         event = gevent.event.Event()
-        times = [scheduler.now]
-        repeat = 3
+        thread_id = current_thread().ident
 
-        def action(state):
-            if state:
-                times.append(scheduler.now)
-                state -= 1
-            else:
-                event.set()
-            return state
+        history = SchedulerHistory(scheduler)
+        action = history.make_periodic(repeat, event.set, lambda s: s + 1)
 
-        scheduler.schedule_periodic(0.0, action, state=repeat)
+        scheduler.schedule_periodic(0.0, action, state=0)
 
-        event.wait(0.2)
+        event.wait(grace)
 
-        assert event.is_set() is False
-
-        assert len(times) == 2
-        diff = (times[1] - times[0]).total_seconds()
-        assert diff < 0.15
+        assert len(history) == 1
+        call = history[0]
+        assert call.scheduler is None
+        assert call.state == 0
+        assert call.thread_id == thread_id
+        assert call.time_diff <= grace / 2
