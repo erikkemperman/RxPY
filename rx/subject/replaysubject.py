@@ -29,7 +29,7 @@ class QueueItem(NamedTuple):
 
 class ReplaySubject(Subject):
     """Represents an object that is both an observable sequence as well
-    as an observer. Each notification is broadcasted to all subscribed
+    as an observer. Each notification is broadcast to all subscribed
     and future observers, subject to buffer trimming policies.
     """
 
@@ -44,7 +44,7 @@ class ReplaySubject(Subject):
         Args:
             buffer_size: [Optional] Maximum element count of the replay
                 buffer.
-            window [Optional]: Maximum time length of the replay buffer.
+            window: [Optional] Maximum time length of the replay buffer.
             scheduler: [Optional] Scheduler the observers are invoked on.
         """
 
