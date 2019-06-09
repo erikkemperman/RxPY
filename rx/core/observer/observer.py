@@ -5,8 +5,10 @@ from rx.internal import noop, default_error
 
 
 class Observer(typing.Observer, typing.Disposable):
-    """Base class for implementations of the Observer class. This base
-    class enforces the grammar of observers where OnError and
+    """Observer base class.
+
+    Base class for implementations of the Observer class. This base
+    class enforces the contract of observers where OnError and
     OnCompleted are terminal messages.
     """
 
@@ -15,6 +17,16 @@ class Observer(typing.Observer, typing.Disposable):
                  on_error: Optional[typing.OnError] = None,
                  on_completed: Optional[typing.OnCompleted] = None
                  ) -> None:
+        """
+        Create a new Observer instance.
+
+        Args:
+            on_next: Function to be invoked for every emitted element.
+            on_error: Function to be invoked when the observable terminates with
+                an :class:`Exception`.
+            on_completed: Function to be invoked when the observable terminates
+                naturally.
+        """
         self.is_stopped = False
         self._handler_on_next = on_next or noop
         self._handler_on_error = on_error or default_error
@@ -94,7 +106,6 @@ class Observer(typing.Observer, typing.Disposable):
     def as_observer(self) -> 'Observer':
         """Hides the identity of an observer.
 
-        Returns an observer that hides the identity of the specified
-        observer.
+        Returns an observer that hides the identity of the current observer.
         """
         return Observer(self.on_next, self.on_error, self.on_completed)

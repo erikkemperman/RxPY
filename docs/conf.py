@@ -81,7 +81,8 @@ autodoc_default_options = {
 import sphinx_autodoc_typehints
 
 qualname_overrides = {
-    'rx.core.observable.observable.Observable': 'rx.Observable'
+    'rx.core.observable.observable.Observable': 'rx.Observable',
+    'rx.core.observable.observer.Observer': 'rx.Observer'
 }
 
 _format_annotation = sphinx_autodoc_typehints.format_annotation
