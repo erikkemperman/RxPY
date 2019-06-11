@@ -54,14 +54,14 @@ class EventLoopScheduler(PeriodicScheduler, typing.Disposable):
         return self.schedule_absolute(self.now, action, state=state)
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -70,18 +70,18 @@ class EventLoopScheduler(PeriodicScheduler, typing.Disposable):
             (best effort).
         """
 
-        duetime = max(DELTA_ZERO, self.to_timedelta(duetime))
-        return self.schedule_absolute(self.now + duetime, action, state)
+        absolute = self.now + max(DELTA_ZERO, self.to_timedelta(relative))
+        return self.schedule_absolute(absolute, action, state)
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -93,11 +93,11 @@ class EventLoopScheduler(PeriodicScheduler, typing.Disposable):
         if self._is_disposed:
             raise DisposedException()
 
-        dt = self.to_datetime(duetime)
-        si: ScheduledItem[typing.TState] = ScheduledItem(self, state, action, dt)
+        absolute = self.to_datetime(absolute)
+        si: ScheduledItem[typing.TState] = ScheduledItem(self, state, action, absolute)
 
         with self._condition:
-            if dt <= self.now:
+            if absolute <= self.now:
                 self._ready_list.append(si)
             else:
                 self._queue.enqueue(si)

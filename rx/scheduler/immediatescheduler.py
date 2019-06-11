@@ -27,14 +27,14 @@ class ImmediateScheduler(Scheduler):
         return self.invoke_action(action, state)
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -43,21 +43,21 @@ class ImmediateScheduler(Scheduler):
             (best effort).
         """
 
-        duetime = self.to_timedelta(duetime)
-        if duetime > DELTA_ZERO:
+        relative = self.to_timedelta(relative)
+        if relative > DELTA_ZERO:
             raise WouldBlockException()
 
         return self.invoke_action(action, state)
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -66,8 +66,8 @@ class ImmediateScheduler(Scheduler):
             (best effort).
         """
 
-        duetime = self.to_datetime(duetime)
-        return self.schedule_relative(duetime - self.now, action, state)
+        relative = self.to_datetime(absolute) - self.now
+        return self.schedule_relative(relative, action, state)
 
 
 immediate_scheduler = ImmediateScheduler()

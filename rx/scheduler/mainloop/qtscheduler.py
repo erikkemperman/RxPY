@@ -44,14 +44,14 @@ class QtScheduler(PeriodicScheduler):
         return self.schedule_relative(0.0, action, state=state)
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -59,7 +59,7 @@ class QtScheduler(PeriodicScheduler):
             The disposable object used to cancel the scheduled action
             (best effort).
         """
-        msecs = max(0, int(self.to_seconds(duetime) * 1000.0))
+        msecs = max(0, int(self.to_seconds(relative) * 1000.0))
         sad = SingleAssignmentDisposable()
         is_disposed = False
 
@@ -79,14 +79,14 @@ class QtScheduler(PeriodicScheduler):
         return CompositeDisposable(sad, Disposable(dispose))
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -95,8 +95,8 @@ class QtScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        delta: timedelta = self.to_datetime(duetime) - self.now
-        return self.schedule_relative(delta, action, state=state)
+        relative: timedelta = self.to_datetime(absolute) - self.now
+        return self.schedule_relative(relative, action, state=state)
 
     def schedule_periodic(self,
                           period: typing.RelativeTime,

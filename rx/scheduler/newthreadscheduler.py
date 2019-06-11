@@ -42,14 +42,14 @@ class NewThreadScheduler(PeriodicScheduler):
         return scheduler.schedule(action, state)
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -59,17 +59,17 @@ class NewThreadScheduler(PeriodicScheduler):
         """
 
         scheduler = EventLoopScheduler(thread_factory=self.thread_factory, exit_if_empty=True)
-        return scheduler.schedule_relative(duetime, action, state)
+        return scheduler.schedule_relative(relative, action, state)
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -78,8 +78,8 @@ class NewThreadScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        dt = self.to_datetime(duetime)
-        return self.schedule_relative(dt - self.now, action, state=state)
+        relative = self.to_datetime(absolute) - self.now
+        return self.schedule_relative(relative, action, state=state)
 
     def schedule_periodic(self,
                           period: typing.RelativeTime,
