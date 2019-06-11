@@ -69,14 +69,14 @@ class VirtualTimeScheduler(PeriodicScheduler):
         return self.schedule_absolute(self._clock, action, state=state)
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -85,18 +85,18 @@ class VirtualTimeScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        time: typing.AbsoluteTime = self.add(self._clock, self.to_seconds(duetime))
-        return self.schedule_absolute(time, action, state=state)
+        absolute = self.add(self._clock, self.to_seconds(relative))
+        return self.schedule_absolute(absolute, action, state=state)
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -105,7 +105,7 @@ class VirtualTimeScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        dt = self.to_datetime(duetime)
+        dt = self.to_datetime(absolute)
         si: ScheduledItem[typing.TState] = ScheduledItem(self, state, action, dt)
         with self._lock:
             self._queue.enqueue(si)
@@ -151,15 +151,15 @@ class VirtualTimeScheduler(PeriodicScheduler):
         with self._lock:
             self._is_enabled = False
 
-    def advance_to(self, time: typing.AbsoluteTime) -> None:
+    def advance_to(self, absolute: typing.AbsoluteTime) -> None:
         """Advances the schedulers clock to the specified absolute time,
         running all work til that point.
 
         Args:
-            time: Absolute time to advance the schedulers clock to.
+            absolute: Absolute time to advance the schedulers clock to.
         """
 
-        dt: datetime = self.to_datetime(time)
+        dt: datetime = self.to_datetime(absolute)
         with self._lock:
             if self.now > dt:
                 raise ArgumentOutOfRangeException()
@@ -197,26 +197,26 @@ class VirtualTimeScheduler(PeriodicScheduler):
             else:
                 self._clock = self.to_seconds(dt)
 
-    def advance_by(self, time: typing.RelativeTime) -> None:
+    def advance_by(self, relative: typing.RelativeTime) -> None:
         """Advances the schedulers clock by the specified relative time,
         running all work scheduled for that timespan.
 
         Args:
-            time: Relative time to advance the schedulers clock by.
+            relative: Relative time to advance the schedulers clock by.
         """
 
-        log.debug("VirtualTimeScheduler.advance_by(time=%s)", time)
+        log.debug("VirtualTimeScheduler.advance_by(time=%s)", relative)
 
-        self.advance_to(self.add(self.now, self.to_timedelta(time)))
+        self.advance_to(self.add(self.now, self.to_timedelta(relative)))
 
-    def sleep(self, time: typing.RelativeTime) -> None:
+    def sleep(self, relative: typing.RelativeTime) -> None:
         """Advances the schedulers clock by the specified relative time.
 
         Args:
-            time: Relative time to advance the schedulers clock by.
+            relative: Relative time to advance the schedulers clock by.
         """
 
-        absolute = self.add(self.now, self.to_timedelta(time))
+        absolute = self.add(self.now, self.to_timedelta(relative))
         dt: datetime = self.to_datetime(absolute)
 
         if self.now > dt:

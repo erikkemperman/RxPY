@@ -40,14 +40,14 @@ class TimeoutScheduler(PeriodicScheduler):
         return CompositeDisposable(sad, Disposable(dispose))
 
     def schedule_relative(self,
-                          duetime: typing.RelativeTime,
+                          relative: typing.RelativeTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -56,7 +56,7 @@ class TimeoutScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        seconds = self.to_seconds(duetime)
+        seconds = self.to_seconds(relative)
         if seconds <= 0.0:
             return self.schedule(action, state)
 
@@ -75,14 +75,14 @@ class TimeoutScheduler(PeriodicScheduler):
         return CompositeDisposable(sad, Disposable(dispose))
 
     def schedule_absolute(self,
-                          duetime: typing.AbsoluteTime,
+                          absolute: typing.AbsoluteTime,
                           action: typing.ScheduledAction,
                           state: Optional[typing.TState] = None
                           ) -> typing.Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -91,8 +91,8 @@ class TimeoutScheduler(PeriodicScheduler):
             (best effort).
         """
 
-        duetime = self.to_datetime(duetime)
-        return self.schedule_relative(duetime - self.now, action, state)
+        relative = self.to_datetime(absolute) - self.now
+        return self.schedule_relative(relative, action, state)
 
 
 timeout_scheduler = TimeoutScheduler()

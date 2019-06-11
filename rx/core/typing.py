@@ -81,14 +81,14 @@ class Scheduler(abc.Scheduler):
 
     @abstractmethod
     def schedule_relative(self,
-                          duetime: RelativeTime,
+                          relative: RelativeTime,
                           action: 'ScheduledAction',
                           state: Optional[TState] = None
                           ) -> Disposable:
         """Schedules an action to be executed after duetime.
 
         Args:
-            duetime: Relative time after which to execute the action.
+            relative: Relative time after which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 
@@ -101,14 +101,14 @@ class Scheduler(abc.Scheduler):
 
     @abstractmethod
     def schedule_absolute(self,
-                          duetime: AbsoluteTime,
+                          absolute: AbsoluteTime,
                           action: 'ScheduledAction',
                           state: Optional[TState] = None
                           ) -> Disposable:
         """Schedules an action to be executed at duetime.
 
         Args:
-            duetime: Absolute time at which to execute the action.
+            absolute: Absolute time at which to execute the action.
             action: Action to be executed.
             state: [Optional] state to be given to the action function.
 

@@ -14,9 +14,9 @@ class Scheduler(ABC):
         return NotImplemented
 
     @abstractmethod
-    def schedule_relative(self, duetime, action, state=None):
+    def schedule_relative(self, relative, action, state=None):
         return NotImplemented
 
     @abstractmethod
-    def schedule_absolute(self, duetime, action, state=None):
+    def schedule_absolute(self, absolute, action, state=None):
         return NotImplemented
