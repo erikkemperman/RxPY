@@ -13,7 +13,7 @@ def add_ref(xs, r):
 
 
 def is_future(fut: Any) -> bool:
-    return callable(getattr(fut, "add_done_callback", None))
+    return callable(getattr(fut, 'add_done_callback', None))
 
 
 def infinite() -> Iterable[int]:
