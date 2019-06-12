@@ -203,9 +203,9 @@ class Observable(Generic[T_out], abc.Observable):
 
     @abstractmethod
     def subscribe(self,
-                  observer: Observer[T_out] = None,
+                  observer: Optional[Observer[T_out]] = None,
                   *,
-                  scheduler: Scheduler = None
+                  scheduler: Optional[Scheduler] = None
                   ) -> Disposable:
         """Subscribe an observer to the observable sequence.
 
@@ -234,9 +234,9 @@ class Subject(Generic[T_in, T_out], abc.Subject):
 
     @abstractmethod
     def subscribe(self,
-                  observer: Observer[T_out] = None,
+                  observer: Optional[Observer[T_out]] = None,
                   *,
-                  scheduler: Scheduler = None
+                  scheduler: Optional[Scheduler] = None
                   ) -> Disposable:
         """Subscribe an observer to the observable sequence.
 

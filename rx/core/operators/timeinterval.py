@@ -6,6 +6,7 @@ from rx import operators as ops
 from rx.core import Observable, typing
 from rx.scheduler import timeout_scheduler
 
+
 class TimeInterval(NamedTuple):
     value: Any
     interval: timedelta
@@ -35,6 +36,6 @@ def _time_interval(scheduler: Optional[typing.Scheduler] = None) -> Callable[[Ob
                 last = now
                 return TimeInterval(value=value, interval=span)
 
-            return source.pipe(ops.map(mapper)).subscribe(observer, scheduler_)
+            return source.pipe(ops.map(mapper)).subscribe(observer, scheduler=scheduler_)
         return Observable(subscribe)
     return time_interval

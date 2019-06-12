@@ -60,7 +60,12 @@ def _debounce(duetime: typing.RelativeTime, scheduler=typing.Scheduler) -> Calla
                 has_value[0] = False
                 _id[0] += 1
 
-            subscription = source.subscribe_(on_next, on_error, on_completed, scheduler=scheduler_)
+            subscription = source.subscribe_(
+                on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler_
+            )
             return CompositeDisposable(subscription, cancelable)
         return Observable(subscribe)
     return debounce
@@ -117,7 +122,12 @@ def _throttle_with_mapper(throttle_duration_mapper: Callable[[Any], Observable])
                     has_value[0] = False
                     d.dispose()
 
-                d.disposable = throttle.subscribe_(on_next, observer.on_error, on_completed, scheduler=scheduler)
+                d.disposable = throttle.subscribe_(
+                    on_next,
+                    observer.on_error,
+                    on_completed,
+                    scheduler=scheduler
+                )
 
             def on_error(e) -> None:
                 cancelable.dispose()
@@ -134,7 +144,12 @@ def _throttle_with_mapper(throttle_duration_mapper: Callable[[Any], Observable])
                 has_value[0] = False
                 _id[0] += 1
 
-            subscription = source.subscribe_(on_next, on_error, on_completed, scheduler=scheduler)
+            subscription = source.subscribe_(
+                on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler
+            )
             return CompositeDisposable(subscription, cancelable)
         return Observable(subscribe)
     return throttle_with_mapper
