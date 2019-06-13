@@ -23,7 +23,9 @@ def _take_until_with_time(end_time: typing.AbsoluteOrRelativeTime, scheduler: Op
             until the specified end time.
         """
 
-        def subscribe(observer, scheduler_=None):
+        def subscribe_observer(observer: typing.Observer,
+                               scheduler_: Optional[typing.Scheduler] = None
+                               ) -> typing.Disposable:
             _scheduler = scheduler or scheduler_ or timeout_scheduler
 
             if isinstance(end_time, datetime):
@@ -35,6 +37,6 @@ def _take_until_with_time(end_time: typing.AbsoluteOrRelativeTime, scheduler: Op
                 observer.on_completed()
 
             task = scheduler_method(end_time, action)
-            return CompositeDisposable(task, source.subscribe(observer, scheduler=scheduler_))
-        return Observable(subscribe)
+            return CompositeDisposable(task, source.subscribe_observer(observer, scheduler=scheduler_))
+        return Observable(subscribe_observer=subscribe_observer)
     return take_until_with_time

@@ -37,7 +37,9 @@ def _range(start: int,
     else:
         range_t = range(start, stop, step)
 
-    def subscribe(observer, scheduler_: typing.Scheduler = None):
+    def subscribe_observer(observer: typing.Observer,
+                           scheduler_: Optional[typing.Scheduler] = None
+                           ) -> typing.Disposable:
         nonlocal range_t
 
         _scheduler = scheduler or scheduler_ or current_thread_scheduler
@@ -52,4 +54,4 @@ def _range(start: int,
 
         sd.disposable = _scheduler.schedule(action, iter(range_t))
         return sd
-    return Observable(subscribe)
+    return Observable(subscribe_observer=subscribe_observer)

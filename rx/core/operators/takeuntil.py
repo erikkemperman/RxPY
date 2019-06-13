@@ -1,8 +1,8 @@
-from typing import Callable
+from typing import Callable, Optional
 
 from rx import from_future
 from rx.internal import noop
-from rx.core import Observable
+from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable
 from rx.internal.utils import is_future
 
@@ -23,19 +23,21 @@ def _take_until(other: Observable) -> Callable[[Observable], Observable]:
             further propagation.
         """
 
-        def subscribe(observer, scheduler=None):
+        def subscribe_observer(observer: typing.Observer,
+                               scheduler: Optional[typing.Scheduler] = None
+                               ) -> typing.Disposable:
 
             def on_completed(_):
                 observer.on_completed()
 
             return CompositeDisposable(
-                source.subscribe(observer),
-                other.subscribe_(
+                source.subscribe_observer(observer),
+                other.subscribe(
                     on_completed,
                     observer.on_error,
                     noop,
                     scheduler=scheduler
                 )
             )
-        return Observable(subscribe)
+        return Observable(subscribe_observer=subscribe_observer)
     return take_until

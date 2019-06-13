@@ -1,7 +1,7 @@
-from typing import Callable
+from typing import Callable, Optional
 
 import rx
-from rx.core import Observable
+from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable, SingleAssignmentDisposable
 from rx.internal.utils import is_future
 
@@ -23,7 +23,9 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
     other = rx.from_future(other) if is_future(other) else other
 
     def skip_until(source: Observable) -> Observable:
-        def subscribe(observer, scheduler=None):
+        def subscribe_observer(observer: typing.Observer,
+                               scheduler: Optional[typing.Scheduler] = None
+                               ) -> typing.Disposable:
             is_open = [False]
 
             def on_next(left):
@@ -34,7 +36,7 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
                 if is_open[0]:
                     observer.on_completed()
 
-            subs = source.subscribe_(
+            subs = source.subscribe(
                 on_next,
                 observer.on_error,
                 on_completed,
@@ -52,7 +54,7 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
             def on_completed2():
                 right_subscription.dispose()
 
-            right_subscription.disposable = other.subscribe_(
+            right_subscription.disposable = other.subscribe(
                 on_next2,
                 observer.on_error,
                 on_completed2,
@@ -60,5 +62,5 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
             )
 
             return subscriptions
-        return Observable(subscribe)
+        return Observable(subscribe_observer=subscribe_observer)
     return skip_until

@@ -1,7 +1,7 @@
-from typing import Iterable
+from typing import Iterable, Optional
 
 from rx.disposable import Disposable
-from rx.core import Observable
+from rx.core import Observable, typing
 from rx.disposable import SingleAssignmentDisposable, CompositeDisposable, SerialDisposable
 from rx.scheduler import current_thread_scheduler
 
@@ -26,7 +26,9 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
 
     sources_ = iter(sources)
 
-    def subscribe(observer, scheduler=None):
+    def subscribe_observer(observer: typing.Observer,
+                           scheduler: Optional[typing.Scheduler] = None
+                           ) -> typing.Disposable:
         scheduler = scheduler or current_thread_scheduler
 
         subscription = SerialDisposable()
@@ -54,7 +56,7 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
             else:
                 d = SingleAssignmentDisposable()
                 subscription.disposable = d
-                d.disposable = current.subscribe_(
+                d.disposable = current.subscribe(
                     observer.on_next,
                     on_error,
                     observer.on_completed,
@@ -66,4 +68,4 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
         def dispose():
             is_disposed.append(True)
         return CompositeDisposable(subscription, cancelable, Disposable(dispose))
-    return Observable(subscribe)
+    return Observable(subscribe_observer=subscribe_observer)

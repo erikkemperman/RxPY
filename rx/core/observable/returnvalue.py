@@ -23,7 +23,9 @@ def _return_value(value: Any, scheduler: Optional[typing.Scheduler] = None) -> O
         element.
     """
 
-    def subscribe(observer: typing.Observer, scheduler_: Optional[typing.Scheduler] = None) -> typing.Disposable:
+    def subscribe_observer(observer: typing.Observer,
+                           scheduler_: Optional[typing.Scheduler] = None
+                           ) -> typing.Disposable:
         _scheduler = scheduler or scheduler_ or current_thread_scheduler
 
         def action(scheduler: typing.Scheduler, state: Any = None):
@@ -31,11 +33,13 @@ def _return_value(value: Any, scheduler: Optional[typing.Scheduler] = None) -> O
             observer.on_completed()
 
         return _scheduler.schedule(action)
-    return Observable(subscribe)
+    return Observable(subscribe_observer=subscribe_observer)
 
 
 def _from_callable(supplier: Callable[[], Any], scheduler: Optional[typing.Scheduler] = None) -> Observable:
-    def subscribe(observer: typing.Observer, scheduler_: typing.Scheduler = None):
+    def subscribe_observer(observer: typing.Observer,
+                           scheduler_: Optional[typing.Scheduler] = None
+                           ) -> typing.Disposable:
         _scheduler = scheduler or scheduler_ or current_thread_scheduler
 
         def action(_: Scheduler, __: Any = None):
@@ -48,4 +52,4 @@ def _from_callable(supplier: Callable[[], Any], scheduler: Optional[typing.Sched
                 observer.on_error(e)
         return _scheduler.schedule(action)
 
-    return Observable(subscribe)
+    return Observable(subscribe_observer=subscribe_observer)
