@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from rx import operators as ops
 from rx.core import Observable, typing
+from rx.internal.utils import subscribe as _subscribe
 from rx.scheduler import timeout_scheduler
 
 
@@ -38,6 +39,8 @@ def _time_interval(scheduler: Optional[typing.Scheduler] = None) -> Callable[[Ob
                 last = now
                 return TimeInterval(value=value, interval=span)
 
-            return observer.subscribe_to(source.pipe(ops.map(mapper)), scheduler=scheduler_)
+            return _subscribe(source.pipe(ops.map(mapper)),
+                              observer,
+                              scheduler=scheduler_)
         return Observable(subscribe_observer=subscribe_observer)
     return time_interval

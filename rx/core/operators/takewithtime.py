@@ -2,6 +2,7 @@ from typing import Callable, Optional
 
 from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable
+from rx.internal.utils import subscribe as _subscribe
 from rx.scheduler import timeout_scheduler
 
 
@@ -37,7 +38,7 @@ def _take_with_time(duration: typing.RelativeTime, scheduler: Optional[typing.Sc
                 observer.on_completed()
 
             disp = _scheduler.schedule_relative(duration, action)
-            sub = observer.subscribe_to(source, scheduler=scheduler_)
+            sub = _subscribe(source, observer, scheduler=scheduler_)
             return CompositeDisposable(disp, sub)
         return Observable(subscribe_observer=subscribe_observer)
     return take_with_time
