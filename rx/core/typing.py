@@ -168,6 +168,14 @@ class Observer(Generic[T_in], abc.Observer):
     __slots__ = ()
 
     @abstractmethod
+    def subscribe_to(self,
+                     observable: 'Observable',
+                     *,
+                     scheduler: Optional[Scheduler] = None
+                     ) -> Disposable:
+        raise NotImplementedError
+
+    @abstractmethod
     def on_next(self, value: T_in) -> None:
         """Notifies the observer of a new element in the sequence.
 
@@ -211,9 +219,6 @@ class Observable(Generic[T_out], abc.Observable):
                   ) -> Disposable:
         """Subscribe callbacks to the observable sequence.
 
-        If you would like to subscribe using an :class:`Observer` instead of
-        callbacks,  please use :func:`subscribe_observer`.
-
         Args:
             on_next: [Optional] Action to invoke for each element in the
                 observable sequence.
@@ -225,30 +230,6 @@ class Observable(Generic[T_out], abc.Observable):
 
         Returns:
             Disposable object representing subscription to the observable
-            sequence.
-        """
-
-        raise NotImplementedError
-
-    @abstractmethod
-    def subscribe_observer(self,
-                           observer: Optional[Observer[T_out]] = None,
-                           *,
-                           scheduler: Optional[Scheduler] = None
-                           ) -> Disposable:
-        """Subscribe an observer to the observable sequence.
-
-        If you would like to subscribe using callbacks instead of an observer,
-        please use :func:`subscribe`.
-
-        Args:
-            observer: [Optional] The object that is to receive
-                notifications.
-            scheduler: [Optional] The default scheduler to use for this
-                subscription.
-
-        Returns:
-            Disposable object representing a subscription to the observable
             sequence.
         """
 
@@ -274,9 +255,6 @@ class Subject(Generic[T_in, T_out], abc.Subject):
                   ) -> Disposable:
         """Subscribe callbacks to the observable sequence.
 
-        If you would like to subscribe using an :class:`Observer` instead of
-        callbacks,  please use :func:`subscribe_observer`.
-
         Args:
             on_next: [Optional] Action to invoke for each element in the
                 observable sequence.
@@ -294,27 +272,11 @@ class Subject(Generic[T_in, T_out], abc.Subject):
         raise NotImplementedError
 
     @abstractmethod
-    def subscribe_observer(self,
-                           observer: Observer[T_out],
-                           *,
-                           scheduler: Optional[Scheduler] = None
-                           ) -> Disposable:
-        """Subscribe an observer to the observable sequence.
-
-        If you would like to subscribe using callbacks instead of an observer,
-        please use :func:`subscribe`.
-
-        Args:
-            observer: [Optional] The object that is to receive
-                notifications.
-            scheduler: [Optional] The default scheduler to use for this
-                subscription.
-
-        Returns:
-            Disposable object representing a subscription to the observable
-            sequence.
-        """
-
+    def subscribe_to(self,
+                     observable: 'Observable',
+                     *,
+                     scheduler: Optional[Scheduler] = None
+                     ) -> Disposable:
         raise NotImplementedError
 
     @abstractmethod

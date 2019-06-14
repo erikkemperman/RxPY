@@ -31,7 +31,7 @@ def _take_until(other: Observable) -> Callable[[Observable], Observable]:
                 observer.on_completed()
 
             return CompositeDisposable(
-                source.subscribe_observer(observer),
+                observer.subscribe_to(source),
                 other.subscribe(
                     on_completed,
                     observer.on_error,
