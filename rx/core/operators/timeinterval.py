@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from rx import operators as ops
 from rx.core import Observable, typing
-from rx.internal.utils import subscribe as _subscribe
 from rx.scheduler import timeout_scheduler
 
 
@@ -13,7 +12,10 @@ class TimeInterval(NamedTuple):
     interval: timedelta
 
 
-def _time_interval(scheduler: Optional[typing.Scheduler] = None) -> Callable[[Observable], Observable]:
+def _time_interval(scheduler: Optional[typing.Scheduler] = None
+                   ) -> Callable[[Observable], Observable]:
+    op_scheduler = scheduler
+
     def time_interval(source: Observable) -> Observable:
         """Records the time interval between consecutive values in an
         observable sequence.
@@ -25,22 +27,27 @@ def _time_interval(scheduler: Optional[typing.Scheduler] = None) -> Callable[[Ob
             values.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            _scheduler = scheduler or scheduler_ or timeout_scheduler
-            last = _scheduler.now
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            sub_scheduler = op_scheduler or scheduler or timeout_scheduler
+            last = sub_scheduler.now
 
             def mapper(value):
                 nonlocal last
 
-                now = _scheduler.now
+                now = sub_scheduler.now
                 span = now - last
                 last = now
                 return TimeInterval(value=value, interval=span)
 
-            return _subscribe(source.pipe(ops.map(mapper)),
-                              observer,
-                              scheduler=scheduler_)
-        return Observable(subscribe_observer=subscribe_observer)
+            return source.pipe(ops.map(mapper)).subscribe(
+                on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler
+            )
+        return Observable(subscribe)
     return time_interval

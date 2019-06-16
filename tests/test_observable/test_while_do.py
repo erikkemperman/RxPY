@@ -71,11 +71,12 @@ class TestWhile(unittest.TestCase):
                 n[0] += 1
                 return n[0] < 100
 
-            def subscribe(o, scheduler=None):
-                o.on_next(1)
-                o.on_completed()
+            def subscribe(on_next=None, on_error=None, on_completed=None,
+                          scheduler=None):
+                on_next(1)
+                on_completed()
                 return lambda: None
-            return rx.create(subscribe_observer=subscribe).pipe(ops.while_do(predicate))
+            return rx.create(subscribe).pipe(ops.while_do(predicate))
         results = scheduler.start(create=create)
 
         assert results.messages == [on_next(200, 1) for _ in range(99)] + [on_completed(200)]

@@ -1,13 +1,16 @@
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable
 from rx.scheduler import timeout_scheduler
 
 
-def _skip_until_with_time(start_time: typing.AbsoluteOrRelativeTime, scheduler: Optional[typing.Scheduler] = None
+def _skip_until_with_time(start_time: typing.AbsoluteOrRelativeTime,
+                          scheduler: Optional[typing.Scheduler] = None
                           ) -> Callable[[Observable], Observable]:
+    op_scheduler = scheduler
+
     def skip_until_with_time(source: Observable) -> Observable:
         """Skips elements from the observable source sequence until the
         specified start time.
@@ -30,31 +33,35 @@ def _skip_until_with_time(start_time: typing.AbsoluteOrRelativeTime, scheduler: 
             specified start time.
         """
 
-        if isinstance(start_time, datetime):
-            scheduler_method = 'schedule_absolute'
-        else:
-            scheduler_method = 'schedule_relative'
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            sub_scheduler = op_scheduler or scheduler or timeout_scheduler
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            _scheduler = scheduler or scheduler_ or timeout_scheduler
+            if isinstance(start_time, datetime):
+                scheduler_method = sub_scheduler.schedule_absolute
+            else:
+                scheduler_method = sub_scheduler.schedule_relative
 
             open = [False]
 
-            def on_next(x):
-                if open[0]:
-                    observer.on_next(x)
+            def _on_next(x):
+                if open[0] and on_next is not None:
+                    on_next(x)
+
             subscription = source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
-                scheduler=scheduler_
+                _on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler
             )
 
-            def action(scheduler, state):
+            def action(_: typing.Scheduler, __: Any = None) -> None:
                 open[0] = True
-            disp = getattr(_scheduler, scheduler_method)(start_time, action)
+
+            disp = scheduler_method(start_time, action)
             return CompositeDisposable(disp, subscription)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return skip_until_with_time

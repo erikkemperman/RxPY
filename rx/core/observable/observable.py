@@ -1,6 +1,6 @@
 # By design, pylint: disable=C0302
 import threading
-from typing import cast, overload, Any, Callable, Optional, TypeVar
+from typing import overload, Any, Callable, Optional, TypeVar
 
 from rx.disposable import Disposable
 from rx.scheduler import current_thread_scheduler
@@ -24,40 +24,31 @@ class Observable(typing.Observable):
     :mod:`operators <rx.operators>`."""
 
     def __init__(self,
-                 subscribe: Optional[typing.SubscribeCallbacks] = None,
-                 *,
-                 subscribe_observer: Optional[typing.SubscribeObserver] = None
+                 subscribe: Optional[typing.Subscribe] = None,
                  ) -> None:
         """Creates an observable sequence object from the given subscribe
         function.
 
-        Note: only one of the arguments takes effect, and the first one takes
-        precedence in case both are given.
-
         Args:
             subscribe: [Optional] Subscription function using callbacks.
-            subscribe_observer: [Optional] Subscription function using an
-                :class:`Observer <rx.core.typing.Observer>`.
         """
 
         super().__init__()
 
         self.lock = threading.RLock()
         self._subscribe = subscribe
-        self._subscribe_observer = subscribe_observer
 
     def _subscribe_core(self,
-                        observer: typing.Observer,
+                        on_next: Optional[typing.OnNext] = None,
+                        on_error: Optional[typing.OnError] = None,
+                        on_completed: Optional[typing.OnCompleted] = None,
                         scheduler: Optional[typing.Scheduler] = None
                         ) -> typing.Disposable:
         if self._subscribe is not None:
-            return self._subscribe(observer.on_next,
-                                   observer.on_error,
-                                   observer.on_completed,
+            return self._subscribe(on_next,
+                                   on_error,
+                                   on_completed,
                                    scheduler)
-
-        if self._subscribe_observer is not None:
-            return self._subscribe_observer(observer, scheduler)
 
         return Disposable()
 
@@ -101,7 +92,11 @@ class Observable(typing.Observable):
 
         def set_disposable(_: abc.Scheduler = None, __: Any = None):
             try:
-                subscriber = self._subscribe_core(auto_detach_obs, scheduler)
+                subscriber = self._subscribe_core(
+                    auto_detach_obs.on_next,
+                    auto_detach_obs.on_error,
+                    auto_detach_obs.on_completed,
+                    scheduler=scheduler)
             except Exception as ex:  # By design. pylint: disable=W0703
                 if not auto_detach_obs.fail(ex):
                     raise

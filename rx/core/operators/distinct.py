@@ -46,27 +46,30 @@ def _distinct(key_mapper: Optional[Mapper] = None,
             sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             hashset = HashSet(comparer)
 
-            def on_next(x):
+            def _on_next(x):
                 key = x
 
                 if key_mapper:
                     try:
                         key = key_mapper(x)
                     except Exception as ex:
-                        observer.on_error(ex)
+                        if on_error is not None:
+                            on_error(ex)
                         return
 
-                hashset.push(key) and observer.on_next(x)
+                hashset.push(key) and on_next is not None and on_next(x)
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return distinct

@@ -36,9 +36,11 @@ def _group_join(right: Observable,
         return None
 
     def group_join(left: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             group = CompositeDisposable()
             rcd = RefCountDisposable(group)
             left_map = OrderedDict()
@@ -61,10 +63,12 @@ def _group_join(right: Observable,
                     for left_value in left_map.values():
                         left_value.on_error(e)
 
-                    observer.on_error(e)
+                    if on_error is not None:
+                        on_error(e)
                     return
 
-                observer.on_next(result)
+                if on_next is not None:
+                    on_next(result)
 
                 for right_value in right_map.values():
                     subject.on_next(right_value)
@@ -85,18 +89,20 @@ def _group_join(right: Observable,
                     for left_value in left_map.values():
                         left_value.on_error(e)
 
-                    observer.on_error(e)
+                    if on_error is not None:
+                        on_error(e)
                     return
 
-                def on_error(error):
+                def _on_error(error):
                     for left_value in left_map.values():
                         left_value.on_error(error)
 
-                    observer.on_error(error)
+                    if on_error is not None:
+                        on_error(error)
 
                 md.disposable = duration.pipe(ops.take(1)).subscribe(
                     nothing,
-                    on_error,
+                    _on_error,
                     expire,
                     scheduler=scheduler
                 )
@@ -105,12 +111,13 @@ def _group_join(right: Observable,
                 for left_value in left_map.values():
                     left_value.on_error(error)
 
-                observer.on_error(error)
+                if on_error is not None:
+                    on_error(error)
 
             group.add(left.subscribe(
                 on_next_left,
                 on_error_left,
-                observer.on_completed,
+                on_completed,
                 scheduler=scheduler
             ))
 
@@ -133,19 +140,21 @@ def _group_join(right: Observable,
                     for left_value in left_map.values():
                         left_value.on_error(e)
 
-                    observer.on_error(e)
+                    if on_error is not None:
+                        on_error(e)
                     return
 
-                def on_error(error):
+                def _on_error(error):
                     with left.lock:
                         for left_value in left_map.values():
                             left_value.on_error(error)
 
-                        observer.on_error(error)
+                        if on_error is not None:
+                            on_error(error)
 
                 md.disposable = duration.pipe(ops.take(1)).subscribe(
                     nothing,
-                    on_error,
+                    _on_error,
                     expire,
                     scheduler=scheduler
                 )
@@ -158,7 +167,8 @@ def _group_join(right: Observable,
                 for left_value in left_map.values():
                     left_value.on_error(error)
 
-                observer.on_error(error)
+                if on_error is not None:
+                    on_error(error)
 
             group.add(right.subscribe(
                 send_right,
@@ -166,5 +176,5 @@ def _group_join(right: Observable,
                 scheduler=scheduler
             ))
             return rcd
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return group_join

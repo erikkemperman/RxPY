@@ -130,15 +130,10 @@ def catch_with_iterable(sources: Iterable[Observable]) -> Observable:
     return _catch_with_iterable(sources)
 
 
-def create(subscribe: Optional[typing.SubscribeCallbacks] = None,
-           *,
-           subscribe_observer: Optional[typing.SubscribeObserver] = None
+def create(subscribe: Optional[typing.Subscribe] = None,
            ) -> Observable:
     """Creates an observable sequence object from the given subscribe
     function.
-
-    Note: only one of the arguments takes effect, and the first one takes
-    precedence in case both are given.
 
     .. marble::
         :alt: create
@@ -148,14 +143,12 @@ def create(subscribe: Optional[typing.SubscribeCallbacks] = None,
 
     Args:
         subscribe: [Optional] Subscription function using callbacks.
-        subscribe_observer: [Optional] Subscription function using an
-            :class:`Observer <rx.core.typing.Observer>`.
 
     Returns:
         An observable sequence delegating to the given subscribe function.
     """
 
-    return Observable(subscribe=subscribe, subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def combine_latest(*sources: Observable) -> Observable:

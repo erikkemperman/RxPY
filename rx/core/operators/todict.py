@@ -18,16 +18,19 @@ def _to_dict(key_mapper: Mapper,
             containing the values from the observable sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             m = dict()
 
-            def on_next(x: Any) -> None:
+            def _on_next(x: Any) -> None:
                 try:
                     key = key_mapper(x)
                 except Exception as ex:  # pylint: disable=broad-except
-                    observer.on_error(ex)
+                    if on_error is not None:
+                        on_error(ex)
                     return
 
                 element = x
@@ -35,21 +38,24 @@ def _to_dict(key_mapper: Mapper,
                     try:
                         element = element_mapper(x)
                     except Exception as ex:  # pylint: disable=broad-except
-                        observer.on_error(ex)
+                        if on_error is not None:
+                            on_error(ex)
                         return
 
                 m[key] = element
 
-            def on_completed() -> None:
-                observer.on_next(m)
-                observer.on_completed()
+            def _on_completed() -> None:
+                if on_next is not None:
+                    on_next(m)
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return to_dict
 

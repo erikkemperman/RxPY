@@ -52,48 +52,55 @@ def _window(boundaries: Observable) -> Callable[[Observable], Observable]:
         An observable sequence of windows.
     """
     def window(source: Observable) -> Observable:
-
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             window_subject = Subject()
             d = CompositeDisposable()
             r = RefCountDisposable(d)
 
-            observer.on_next(add_ref(window_subject, r))
+            ref = add_ref(window_subject, r)
+            if on_next is not None:
+                on_next(ref)
 
-            def on_next_window(x):
+            def _on_next_window(x):
                 window_subject.on_next(x)
 
-            def on_error(err):
+            def _on_error(err):
                 window_subject.on_error(err)
-                observer.on_error(err)
+                if on_error is not None:
+                    on_error(err)
 
-            def on_completed():
+            def _on_completed():
                 window_subject.on_completed()
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
             d.add(source.subscribe(
-                on_next_window,
-                on_error,
-                on_completed,
+                _on_next_window,
+                _on_error,
+                _on_completed,
                 scheduler=scheduler
             ))
 
-            def on_next_observer(w):
+            def _on_next_observer(w):
                 nonlocal window_subject
                 window_subject.on_completed()
                 window_subject = Subject()
-                observer.on_next(add_ref(window_subject, r))
+                ref = add_ref(window_subject, r)
+                if on_next is not None:
+                    on_next(ref)
 
             d.add(boundaries.subscribe(
-                on_next_observer,
-                on_error,
-                on_completed,
+                _on_next_observer,
+                _on_error,
+                _on_completed,
                 scheduler=scheduler
             ))
             return r
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return window
 
 
@@ -109,31 +116,37 @@ def _window_when(closing_mapper: Callable[[], Observable]) -> Callable[[Observab
     """
     def window_when(source: Observable) -> Observable:
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             m = SerialDisposable()
             d = CompositeDisposable(m)
             r = RefCountDisposable(d)
             window = Subject()
 
-            observer.on_next(add_ref(window, r))
+            ref = add_ref(window, r)
+            if on_next is not None:
+                on_next(ref)
 
-            def on_next(value):
+            def _on_next(value):
                 window.on_next(value)
 
-            def on_error(error):
+            def _on_error(error):
                 window.on_error(error)
-                observer.on_error(error)
+                if on_error is not None:
+                    on_error(error)
 
-            def on_completed():
+            def _on_completed():
                 window.on_completed()
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
             d.add(source.subscribe(
-                on_next,
-                on_error,
-                on_completed,
+                _on_next,
+                _on_error,
+                _on_completed,
                 scheduler=scheduler
             ))
 
@@ -141,26 +154,29 @@ def _window_when(closing_mapper: Callable[[], Observable]) -> Callable[[Observab
                 try:
                     window_close = closing_mapper()
                 except Exception as exception:
-                    observer.on_error(exception)
+                    if on_error is not None:
+                        on_error(exception)
                     return
 
-                def on_completed():
+                def _on_completed():
                     nonlocal window
                     window.on_completed()
                     window = Subject()
-                    observer.on_next(add_ref(window, r))
+                    ref = add_ref(window, r)
+                    if on_next is not None:
+                        on_next(ref)
                     create_window_on_completed()
 
                 m1 = SingleAssignmentDisposable()
                 m.disposable = m1
                 m1.disposable = window_close.pipe(ops.take(1)).subscribe(
                     noop,
-                    on_error,
-                    on_completed,
+                    _on_error,
+                    _on_completed,
                     scheduler=scheduler
                 )
 
             create_window_on_completed()
             return r
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return window_when

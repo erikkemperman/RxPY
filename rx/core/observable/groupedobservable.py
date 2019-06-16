@@ -2,7 +2,6 @@ from typing import Optional
 
 from rx.core import typing
 from rx.disposable import CompositeDisposable
-from rx.internal.utils import subscribe as _subscribe
 
 from .observable import Observable
 
@@ -12,16 +11,27 @@ class GroupedObservable(Observable):
         super().__init__()
         self.key = key
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             return CompositeDisposable(
                 merged_disposable.disposable,
-                _subscribe(underlying_observable, observer, scheduler=scheduler)
+                underlying_observable.subscribe(on_next, on_error, on_completed,
+                                                scheduler=scheduler)
             )
 
         self.underlying_observable = underlying_observable if not merged_disposable \
-            else Observable(subscribe_observer=subscribe_observer)
+            else Observable(subscribe)
 
-    def _subscribe_core(self, observer, scheduler=None):
-        return _subscribe(self.underlying_observable, observer, scheduler=scheduler)
+    def _subscribe_core(self,
+                        on_next: Optional[typing.OnNext] = None,
+                        on_error: Optional[typing.OnError] = None,
+                        on_completed: Optional[typing.OnCompleted] = None,
+                        scheduler: Optional[typing.Scheduler] = None
+                        ) -> typing.Disposable:
+        return self.underlying_observable.subscribe(on_next,
+                                                    on_error,
+                                                    on_completed,
+                                                    scheduler=scheduler)

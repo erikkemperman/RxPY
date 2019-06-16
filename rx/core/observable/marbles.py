@@ -1,6 +1,7 @@
-from typing import List, Tuple, Optional, Mapping
-import re
 import threading
+import re
+from sys import maxsize
+from typing import Any, List, Optional, Mapping, Tuple
 from datetime import datetime, timedelta
 
 from rx import Observable
@@ -39,10 +40,10 @@ def hot(string: str,
         scheduler: Optional[Scheduler] = None
         ) -> Observable:
 
-    _scheduler = scheduler or new_thread_scheduler
+    obs_scheduler = scheduler or new_thread_scheduler
 
     if isinstance(duetime, datetime):
-        duetime = duetime - _scheduler.now
+        duetime = duetime - obs_scheduler.now
 
     messages = parse(
         string,
@@ -55,36 +56,43 @@ def hot(string: str,
 
     lock = threading.RLock()
     is_stopped = False
-    observers = []
+    gen_id = ~maxsize
+    observers = {}
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         # should a hot observable already completed or on error
         # re-push on_completed/on_error at subscription time?
+        nonlocal gen_id
         if not is_stopped:
             with lock:
-                observers.append(observer)
+                obs_id = gen_id
+                gen_id += 1
+                observers[obs_id] = (on_next, on_error, on_completed)
 
         def dispose():
             with lock:
                 try:
-                    observers.remove(observer)
+                    del observers[obs_id]
                 except ValueError:
                     pass
 
         return Disposable(dispose)
 
     def create_action(notification):
-        def action(scheduler, state=None):
+        def action(_: typing.Scheduler, __: Any = None) -> None:
             nonlocal is_stopped
 
             with lock:
-                for observer in observers:
-                    notification.accept(observer)
+                _observers = observers.copy().values()
+            for on_next, on_error, on_completed in _observers:
+                notification.accept(on_next, on_error, on_completed)
 
-                if notification.kind in ('C', 'E'):
-                    is_stopped = True
+            if notification.kind in ('C', 'E'):
+                is_stopped = True
 
         return action
 
@@ -93,9 +101,9 @@ def hot(string: str,
         action = create_action(notification)
 
         # Don't make closures within a loop
-        _scheduler.schedule_relative(timespan, action)
+        obs_scheduler.schedule_relative(timespan, action)
 
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def from_marbles(string: str,
@@ -105,28 +113,31 @@ def from_marbles(string: str,
                  scheduler: Optional[Scheduler] = None
                  ) -> Observable:
 
+    obs_scheduler = scheduler
     messages = parse(string, timespan=timespan, lookup=lookup, error=error, raise_stopped=True)
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or new_thread_scheduler
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or new_thread_scheduler
         disp = CompositeDisposable()
 
         def schedule_msg(message):
             duetime, notification = message
 
-            def action(*_, **__):
-                notification.accept(observer)
+            def action(_: typing.Scheduler, __: Any = None) -> None:
+                notification.accept(on_next, on_error, on_completed)
 
-            disp.add(_scheduler.schedule_relative(duetime, action))
+            disp.add(sub_scheduler.schedule_relative(duetime, action))
 
         for message in messages:
             # Don't make closures within a loop
             schedule_msg(message)
 
         return disp
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def parse(string: str,

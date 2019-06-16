@@ -22,26 +22,32 @@ class AsyncSubject(Subject):
         self.has_value = False
 
     def _subscribe_core(self,
-                        observer: typing.Observer,
+                        on_next: Optional[typing.OnNext] = None,
+                        on_error: Optional[typing.OnError] = None,
+                        on_completed: Optional[typing.OnCompleted] = None,
                         scheduler: Optional[typing.Scheduler] = None
                         ) -> typing.Disposable:
         with self.lock:
             self.check_disposed()
             if not self.is_stopped:
-                self.observers.append(observer)
-                return InnerSubscription(self, observer)
+                obs_id = self._gen_id()
+                self.observers[obs_id] = on_next, on_error, on_completed
+                return InnerSubscription(self, obs_id)
 
             ex = self.exception
             has_value = self.has_value
             value = self.value
 
         if ex:
-            observer.on_error(ex)
+            if on_error is not None:
+                on_error(ex)
         elif has_value:
-            observer.on_next(value)
-            observer.on_completed()
-        else:
-            observer.on_completed()
+            if on_next is not None:
+                on_next(value)
+            if on_completed is not None:
+                on_completed()
+        elif on_completed is not None:
+            on_completed()
 
         return Disposable()
 
@@ -62,18 +68,21 @@ class AsyncSubject(Subject):
         subscribed observers."""
 
         with self.lock:
-            observers = self.observers.copy()
+            observers = self.observers.copy().values()
             self.observers.clear()
             value = self.value
             has_value = self.has_value
 
         if has_value:
-            for observer in observers:
-                observer.on_next(value)
-                observer.on_completed()
+            for on_next, on_error, on_completed in observers:
+                if on_next is not None:
+                    on_next(value)
+                if on_completed is not None:
+                    on_completed()
         else:
-            for observer in observers:
-                observer.on_completed()
+            for on_next, on_error, on_completed in observers:
+                if on_completed is not None:
+                    on_completed()
 
     def dispose(self) -> None:
         """Unsubscribe all observers and release resources."""

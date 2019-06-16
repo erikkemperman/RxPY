@@ -4,7 +4,7 @@ from rx import from_future
 from rx.internal import noop
 from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable
-from rx.internal.utils import is_future, subscribe as _subscribe
+from rx.internal.utils import is_future
 
 
 def _take_until(other: Observable) -> Callable[[Observable], Observable]:
@@ -23,21 +23,24 @@ def _take_until(other: Observable) -> Callable[[Observable], Observable]:
             further propagation.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
 
-            def on_completed(_):
-                observer.on_completed()
+            def _on_completed(_):
+                if on_completed is not None:
+                    on_completed()
 
             return CompositeDisposable(
-                _subscribe(source, observer),
+                source.subscribe(on_next, on_error, on_completed),
                 other.subscribe(
-                    on_completed,
-                    observer.on_error,
+                    _on_completed,
+                    on_error,
                     noop,
                     scheduler=scheduler
                 )
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take_until

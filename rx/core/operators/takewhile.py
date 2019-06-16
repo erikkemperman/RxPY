@@ -22,12 +22,14 @@ def _take_while(predicate: Predicate, inclusive: bool = False) -> Callable[[Obse
             test no longer passes.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             running = True
 
-            def on_next(value):
+            def _on_next(value):
                 nonlocal running
 
                 with source.lock:
@@ -37,23 +39,26 @@ def _take_while(predicate: Predicate, inclusive: bool = False) -> Callable[[Obse
                     try:
                         running = predicate(value)
                     except Exception as exn:
-                        observer.on_error(exn)
+                        if on_error is not None:
+                            on_error(exn)
                         return
 
                 if running:
-                    observer.on_next(value)
+                    if on_next is not None:
+                        on_next(value)
                 else:
-                    if inclusive:
-                        observer.on_next(value)
-                    observer.on_completed()
+                    if inclusive and on_next is not None:
+                        on_next(value)
+                    if on_completed is not None:
+                        on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take_while
 
 
@@ -75,13 +80,15 @@ def _take_while_indexed(predicate: PredicateIndexed, inclusive: bool = False) ->
             test no longer passes.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             running = True
             i = 0
 
-            def on_next(value: Any) -> None:
+            def _on_next(value: Any) -> None:
                 nonlocal running, i
 
                 with source.lock:
@@ -91,23 +98,26 @@ def _take_while_indexed(predicate: PredicateIndexed, inclusive: bool = False) ->
                     try:
                         running = predicate(value, i)
                     except Exception as exn:
-                        observer.on_error(exn)
+                        if on_error is not None:
+                            on_error(exn)
                         return
                     else:
                         i += 1
 
                 if running:
-                    observer.on_next(value)
+                    if on_next is not None:
+                        on_next(value)
                 else:
-                    if inclusive:
-                        observer.on_next(value)
-                    observer.on_completed()
+                    if inclusive and on_next is not None:
+                        on_next(value)
+                    if on_completed is not None:
+                        on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take_while_indexed

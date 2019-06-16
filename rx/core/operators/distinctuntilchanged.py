@@ -37,37 +37,42 @@ def _distinct_until_changed(
             the source sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             has_current_key = [False]
             current_key = [None]
 
-            def on_next(value):
+            def _on_next(value):
                 comparer_equals = False
                 try:
                     key = key_mapper(value)
                 except Exception as exception:  # pylint: disable=broad-except
-                    observer.on_error(exception)
+                    if on_error is not None:
+                        on_error(exception)
                     return
 
                 if has_current_key[0]:
                     try:
                         comparer_equals = comparer(current_key[0], key)
                     except Exception as exception:  # pylint: disable=broad-except
-                        observer.on_error(exception)
+                        if on_error is not None:
+                            on_error(exception)
                         return
 
                 if not has_current_key[0] or not comparer_equals:
                     has_current_key[0] = True
                     current_key[0] = key
-                    observer.on_next(value)
+                    if on_next is not None:
+                        on_next(value)
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return distinct_until_changed

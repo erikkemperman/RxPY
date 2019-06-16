@@ -1,13 +1,13 @@
 from typing import Callable, Optional
 
 from rx.core import Observable, typing
-from rx.core.typing import Observer, Disposable
+from rx.core.typing import Disposable
 from rx.disposable import CompositeDisposable
 
 
-def _do_action(on_next: Optional[typing.OnNext] = None,
-               on_error: Optional[typing.OnError] = None,
-               on_completed: Optional[typing.OnCompleted] = None
+def _do_action(_next: Optional[typing.OnNext] = None,
+               _error: Optional[typing.OnError] = None,
+               _completed: Optional[typing.OnCompleted] = None
                ) -> Callable[[Observable], Observable]:
     def do_action(source: Observable) -> Observable:
         """Invokes an action for each element in the observable
@@ -35,41 +35,52 @@ def _do_action(on_next: Optional[typing.OnNext] = None,
             behavior applied.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             def _on_next(x):
-                if not on_next:
-                    observer.on_next(x)
+                if _next is None:
+                    if on_next is not None:
+                        on_next(x)
                 else:
                     try:
-                        on_next(x)
+                        _next(x)
                     except Exception as e:  # pylint: disable=broad-except
-                        observer.on_error(e)
+                        if on_error is not None:
+                            on_error(e)
 
-                    observer.on_next(x)
+                    if on_next is not None:
+                        on_next(x)
 
             def _on_error(exception):
-                if not on_error:
-                    observer.on_error(exception)
+                if _error is None:
+                    if on_error is not None:
+                        on_error(exception)
                 else:
                     try:
-                        on_error(exception)
+                        _error(exception)
                     except Exception as e:  # pylint: disable=broad-except
-                        observer.on_error(e)
-
-                    observer.on_error(exception)
+                        if on_error is not None:
+                            on_error(e)
+                    else:
+                        if on_error is not None:
+                            on_error(exception)
 
             def _on_completed():
-                if not on_completed:
-                    observer.on_completed()
+                if _completed is None:
+                    if on_completed is not None:
+                        on_completed()
                 else:
                     try:
-                        on_completed()
+                        _completed()
                     except Exception as e:   # pylint: disable=broad-except
-                        observer.on_error(e)
+                        if on_error is not None:
+                            on_error(e)
 
-                    observer.on_completed()
+                    if on_completed is not None:
+                        on_completed()
 
             return source.subscribe(
                 _on_next,
@@ -77,21 +88,29 @@ def _do_action(on_next: Optional[typing.OnNext] = None,
                 _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return do_action
 
 
-def do(observer: Observer) -> Callable[[Observable], Observable]:
+def do(on_next: Optional[typing.OnNext] = None,
+       on_error: Optional[typing.OnError] = None,
+       on_completed: Optional[typing.OnCompleted] = None
+       ) -> Callable[[Observable], Observable]:
     """Invokes an action for each element in the observable sequence and
     invokes an action on graceful or exceptional termination of the
     observable sequence. This method can be used for debugging, logging,
     etc. of query behavior by intercepting the message stream to run
     arbitrary actions for messages on the pipeline.
 
-    >>> do(observer)
+    >>> do(on_next, on_error, on_completed)
 
     Args:
-        observer: Observer
+        on_next: [Optional] Action to invoke for each element in
+                the observable sequence.
+        on_error: [Optional] Action to invoke on exceptional
+            termination of the observable sequence.
+        on_completed: [Optional] Action to invoke on graceful
+            termination of the observable sequence.
 
     Returns:
         An operator function that takes the source observable and
@@ -99,7 +118,7 @@ def do(observer: Observer) -> Callable[[Observable], Observable]:
         applied.
     """
 
-    return _do_action(observer.on_next, observer.on_error, observer.on_completed)
+    return _do_action(on_next, on_error, on_completed)
 
 
 def do_after_next(source, after_next):
@@ -109,23 +128,27 @@ def do_after_next(source, after_next):
     after_next -- Action to invoke on each element after it has been emitted
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
 
-        def on_next(value):
+        def _on_next(value):
             try:
-                observer.on_next(value)
+                if on_next is not None:
+                    on_next(value)
                 after_next(value)
             except Exception as e:  # pylint: disable=broad-except
-                observer.on_error(e)
+                if on_error is not None:
+                    on_error(e)
 
         return source.subscribe(
-            on_next,
-            observer.on_error,
-            observer.on_completed
+            _on_next,
+            on_error,
+            on_completed
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def do_on_subscribe(source: Observable, on_subscribe):
@@ -138,18 +161,20 @@ def do_on_subscribe(source: Observable, on_subscribe):
         on_subscribe: Action to invoke on subscription
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         on_subscribe()
         return source.subscribe(
-            observer.on_next,
-            observer.on_error,
-            observer.on_completed,
+            on_next,
+            on_error,
+            on_completed,
             scheduler=scheduler
         )
 
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def do_on_dispose(source: Observable, on_dispose):
@@ -167,21 +192,23 @@ def do_on_dispose(source: Observable, on_dispose):
         def dispose(self) -> None:
             on_dispose()
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         composite_disposable = CompositeDisposable()
         composite_disposable.add(OnDispose())
         subscription = source.subscribe(
-            observer.on_next,
-            observer.on_error,
-            observer.on_completed,
+            on_next,
+            on_error,
+            on_completed,
             scheduler=scheduler
         )
         composite_disposable.add(subscription)
         return composite_disposable
 
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def do_on_terminate(source, on_terminate):
@@ -193,33 +220,39 @@ def do_on_terminate(source, on_terminate):
     on_terminate -- Action to invoke when on_complete or throw is called
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
 
-        def on_completed():
+        def _on_completed():
             try:
                 on_terminate()
             except Exception as err:  # pylint: disable=broad-except
-                observer.on_error(err)
+                if on_error is not None:
+                    on_error(err)
             else:
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
-        def on_error(exception):
+        def _on_error(exception):
             try:
                 on_terminate()
             except Exception as err:  # pylint: disable=broad-except
-                observer.on_error(err)
+                if on_error is not None:
+                    on_error(err)
             else:
-                observer.on_error(exception)
+                if on_error is not None:
+                    on_error(exception)
 
         return source.subscribe(
-            observer.on_next,
-            on_error,
-            on_completed,
+            on_next,
+            _on_error,
+            _on_completed,
             scheduler=scheduler
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def do_after_terminate(source, after_terminate):
@@ -231,31 +264,37 @@ def do_after_terminate(source, after_terminate):
     on_terminate -- Action to invoke after on_complete or throw is called
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
 
-        def on_completed():
-            observer.on_completed()
+        def _on_completed():
+            if on_completed is not None:
+                on_completed()
             try:
                 after_terminate()
             except Exception as err:  # pylint: disable=broad-except
-                observer.on_error(err)
+                if on_error is not None:
+                    on_error(err)
 
-        def on_error(exception):
-            observer.on_error(exception)
+        def _on_error(exception):
+            if on_error is not None:
+                on_error(exception)
             try:
                 after_terminate()
             except Exception as err:  # pylint: disable=broad-except
-                observer.on_error(err)
+                if on_error is not None:
+                    on_error(err)
 
         return source.subscribe(
-            observer.on_next,
-            on_error,
-            on_completed,
+            on_next,
+            _on_error,
+            _on_completed,
             scheduler=scheduler
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def do_finally(finally_action: Callable) -> Callable[[Observable], Observable]:
@@ -283,41 +322,47 @@ def do_finally(finally_action: Callable) -> Callable[[Observable], Observable]:
                 self.was_invoked[0] = True
 
     def partial(source: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
 
             was_invoked = [False]
 
-            def on_completed():
-                observer.on_completed()
+            def _on_completed():
+                if on_completed is not None:
+                    on_completed()
                 try:
                     if not was_invoked[0]:
                         finally_action()
                         was_invoked[0] = True
                 except Exception as err:  # pylint: disable=broad-except
-                    observer.on_error(err)
+                    if on_error is not None:
+                        on_error(err)
 
-            def on_error(exception):
-                observer.on_error(exception)
+            def _on_error(exception):
+                if on_error is not None:
+                    on_error(exception)
                 try:
                     if not was_invoked[0]:
                         finally_action()
                         was_invoked[0] = True
                 except Exception as err:  # pylint: disable=broad-except
-                    observer.on_error(err)
+                    if on_error is not None:
+                        on_error(err)
 
             composite_disposable = CompositeDisposable()
             composite_disposable.add(OnDispose(was_invoked))
             subscription = source.subscribe(
-                observer.on_next,
-                on_error,
-                on_completed,
+                on_next,
+                _on_error,
+                _on_completed,
                 scheduler=scheduler
             )
             composite_disposable.add(subscription)
 
             return composite_disposable
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return partial

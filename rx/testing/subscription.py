@@ -2,7 +2,7 @@ import sys
 
 
 class Subscription(object):
-    def __init__(self, start, end=None):
+    def     __init__(self, start, end=None):
         self.subscribe = start
         self.unsubscribe = end or sys.maxsize
 

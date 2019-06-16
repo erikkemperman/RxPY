@@ -2,7 +2,6 @@ import unittest
 
 from rx import return_value, throw, empty, create
 from rx.disposable import SerialDisposable
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 from rx import operators as ops
@@ -86,11 +85,12 @@ class TestSelect(unittest.TestCase):
                 mapper
             ).subscribe(lambda x: x, lambda ex: ex, lambda: _raise('ex'))
 
-        def subscribe(observer, scheduler=None):
+        def subscribe(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
             _raise('ex')
 
         with self.assertRaises(RxException):
-            create(subscribe_observer=subscribe).pipe(
+            create(subscribe).pipe(
                 mapper
             ).subscribe()
 
@@ -114,9 +114,12 @@ class TestSelect(unittest.TestCase):
                 d.dispose()
             return x + y
 
-        d.disposable = _subscribe(xs.pipe(ops.starmap(mapper)),
-                                  results,
-                                  scheduler=scheduler)
+        d.disposable = xs.pipe(ops.starmap(mapper)).subscribe(
+            results.on_next,
+            results.on_error,
+            results.on_completed,
+            scheduler=scheduler
+        )
 
         def action(scheduler, state):
             return d.dispose()

@@ -10,11 +10,12 @@ def _generate(initial_state: Any,
               condition: Predicate,
               iterate: Mapper
               ) -> Observable:
-
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        scheduler = scheduler or current_thread_scheduler
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        _scheduler = scheduler or current_thread_scheduler
         first = True
         state = initial_state
         mad = MultipleAssignmentDisposable()
@@ -37,15 +38,17 @@ def _generate(initial_state: Any,
                     result = state
 
             except Exception as exception:  # pylint: disable=broad-except
-                observer.on_error(exception)
+                if on_error is not None:
+                    on_error(exception)
                 return
 
             if has_result:
-                observer.on_next(result)
+                if on_next is not None:
+                    on_next(result)
                 mad.disposable = scheduler.schedule(action)
-            else:
-                observer.on_completed()
+            elif on_completed is not None:
+                on_completed()
 
-        mad.disposable = scheduler.schedule(action)
+        mad.disposable = _scheduler.schedule(action)
         return mad
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

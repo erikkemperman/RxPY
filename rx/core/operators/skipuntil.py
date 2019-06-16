@@ -23,23 +23,25 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
     other = rx.from_future(other) if is_future(other) else other
 
     def skip_until(source: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             is_open = [False]
 
-            def on_next(left):
-                if is_open[0]:
-                    observer.on_next(left)
+            def on_next1(left):
+                if is_open[0] and on_next is not None:
+                    on_next(left)
 
-            def on_completed():
-                if is_open[0]:
-                    observer.on_completed()
+            def on_completed1():
+                if is_open[0] and on_completed is not None:
+                    on_completed()
 
             subs = source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                on_next1,
+                on_error,
+                on_completed1,
                 scheduler=scheduler
             )
             subscriptions = CompositeDisposable(subs)
@@ -56,11 +58,11 @@ def _skip_until(other: Observable) -> Callable[[Observable], Observable]:
 
             right_subscription.disposable = other.subscribe(
                 on_next2,
-                observer.on_error,
+                on_error,
                 on_completed2,
                 scheduler=scheduler
             )
 
             return subscriptions
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return skip_until

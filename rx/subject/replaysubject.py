@@ -1,7 +1,8 @@
 import sys
 
+from collections import deque
 from datetime import datetime
-from typing import cast, Any, Optional, List, NamedTuple
+from typing import cast, Any, Deque, Dict, NamedTuple, Optional
 from datetime import timedelta
 
 from rx.core import typing
@@ -12,14 +13,18 @@ from .subject import Subject
 
 
 class RemovableDisposable(typing.Disposable):
-    def __init__(self, subject, observer):
+    def __init__(self, subject, observer, obs_id):
         self.subject = subject
         self.observer = observer
+        self.obs_id = obs_id
 
     def dispose(self):
         self.observer.dispose()
         if not self.subject.is_disposed and self.observer in self.subject.observers:
-            self.subject.observers.remove(self.observer)
+            try:
+                del self.subject.observers[self.obs_id]
+            except KeyError:
+                pass
 
 
 class QueueItem(NamedTuple):
@@ -52,19 +57,22 @@ class ReplaySubject(Subject):
         self.buffer_size = sys.maxsize if buffer_size is None else buffer_size
         self.scheduler = scheduler or current_thread_scheduler
         self.window = timedelta.max if window is None else self.scheduler.to_timedelta(window)
-        self.queue: List[QueueItem] = []
+        self.queue: Deque[QueueItem] = deque()
 
     def _subscribe_core(self,
-                        observer: typing.Observer,
+                        on_next: Optional[typing.OnNext] = None,
+                        on_error: Optional[typing.OnError] = None,
+                        on_completed: Optional[typing.OnCompleted] = None,
                         scheduler: Optional[typing.Scheduler] = None
                         ) -> typing.Disposable:
-        so = ScheduledObserver(self.scheduler, observer)
-        subscription = RemovableDisposable(self, so)
+        so = ScheduledObserver(self.scheduler, on_next, on_error, on_completed)
 
         with self.lock:
             self.check_disposed()
             self._trim(self.scheduler.now)
-            self.observers.append(so)
+            obs_id = self._gen_id()
+            self.observers[obs_id] = so
+            subscription = RemovableDisposable(self, so, obs_id)
 
             for item in self.queue:
                 so.on_next(item.value)
@@ -79,16 +87,16 @@ class ReplaySubject(Subject):
 
     def _trim(self, now: datetime):
         while len(self.queue) > self.buffer_size:
-            self.queue.pop(0)
+            self.queue.popleft()
 
         while self.queue and (now - self.queue[0].interval) > self.window:
-            self.queue.pop(0)
+            self.queue.popleft()
 
     def _on_next_core(self, value: Any) -> None:
         """Notifies all subscribed observers with the value."""
 
         with self.lock:
-            observers = self.observers.copy()
+            observers = self.observers.copy().values()
             now = self.scheduler.now
             self.queue.append(QueueItem(interval=now, value=value))
             self._trim(now)
@@ -103,7 +111,7 @@ class ReplaySubject(Subject):
         """Notifies all subscribed observers with the exception."""
 
         with self.lock:
-            observers = self.observers.copy()
+            observers = self.observers.copy().values()
             self.observers.clear()
             self.exception = error
             now = self.scheduler.now
@@ -117,7 +125,7 @@ class ReplaySubject(Subject):
         """Notifies all subscribed observers of the end of the sequence."""
 
         with self.lock:
-            observers = self.observers.copy()
+            observers = self.observers.copy().values()
             self.observers.clear()
             now = self.scheduler.now
             self._trim(now)

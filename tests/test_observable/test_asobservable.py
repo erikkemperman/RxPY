@@ -2,7 +2,6 @@ import unittest
 
 import rx
 from rx import operators as ops
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 on_next = ReactiveTest.on_next
@@ -67,19 +66,20 @@ class TestAsObservable(unittest.TestCase):
         scheduler = TestScheduler()
         subscribed = [False]
 
-        def subscribe_observer(obs, scheduler=None):
+        def subscribe(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
             subscribed[0] = True
-            disp = _subscribe(scheduler.create_hot_observable(
+            disp = scheduler.create_hot_observable(
                 on_next(150, 1),
                 on_next(220, 2),
                 on_completed(250)
-            ), obs)
+            ).subscribe(on_next, on_error, on_completed)
 
             def func():
                 return disp.dispose()
             return func
 
-        xs = rx.create(subscribe_observer=subscribe_observer)
+        xs = rx.create(subscribe)
         xs.pipe(ops.as_observable())
         assert not subscribed[0]
 

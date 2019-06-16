@@ -26,9 +26,12 @@ class MySubject(Observable, Observer):
         self.subscribe_count = 0
         self.disposed = False
 
-    def _subscribe_core(self, observer, scheduler=None):
+    def _subscribe_core(self, on_next=None, on_error=None, on_completed=None,
+                        *, scheduler=None):
         self.subscribe_count += 1
-        self.observer = observer
+        self.on_next = on_next
+        self.on_error = on_error
+        self.on_completed = on_completed
 
         class Duck:
             def __init__(self, this):
@@ -42,15 +45,15 @@ class MySubject(Observable, Observer):
         self.dispose_on_map[value] = disposable
 
     def on_next(self, value):
-        self.observer.on_next(value)
+        self.on_next(value)
         if value in self.dispose_on_map:
             self.dispose_on_map[value].dispose()
 
     def on_error(self, error):
-        self.observer.on_error(error)
+        self.on_error(error)
 
     def on_completed(self):
-        self.observer.on_completed()
+        self.on_completed()
 
 
 class TestConnectableObservable(unittest.TestCase):

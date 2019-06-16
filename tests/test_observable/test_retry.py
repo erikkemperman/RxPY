@@ -158,7 +158,7 @@ class TestRetry(unittest.TestCase):
         with pytest.raises(RxException):
             scheduler3.start()
 
-        xss = rx.create(subscribe_observer=lambda o: _raise('ex')).pipe(ops.retry(100))
+        xss = rx.create(lambda x: _raise('ex')).pipe(ops.retry(100))
         with pytest.raises(Exception):
             xss.subscribe()
 

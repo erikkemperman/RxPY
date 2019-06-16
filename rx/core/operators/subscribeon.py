@@ -2,7 +2,6 @@ from typing import Callable, Optional
 from rx.core import Observable, typing
 from rx.core.typing import Scheduler
 from rx.disposable import SingleAssignmentDisposable, SerialDisposable, ScheduledDisposable
-from rx.internal.utils import subscribe as _subscribe
 
 
 def _subscribe_on(scheduler: Scheduler) -> Callable[[Observable], Observable]:
@@ -27,19 +26,21 @@ def _subscribe_on(scheduler: Scheduler) -> Callable[[Observable], Observable]:
             un-subscriptions happen on the specified scheduler.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               _: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             m = SingleAssignmentDisposable()
             d = SerialDisposable()
             d.disposable = m
 
             def action(scheduler, state):
-                d.disposable = ScheduledDisposable(scheduler,
-                                                   _subscribe(source, observer))
+                sub = source.subscribe(on_next, on_error, on_completed)
+                d.disposable = ScheduledDisposable(scheduler, sub)
 
             m.disposable = scheduler.schedule(action)
             return d
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return subscribe_on

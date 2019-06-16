@@ -3,7 +3,6 @@ from typing import Union, Callable, Optional
 from rx.core import Observable, ConnectableObservable, typing
 from rx.core.typing import Subject, Scheduler
 from rx.disposable import CompositeDisposable
-from rx.internal.utils import subscribe as _subscribe
 
 
 def _multicast(subject: Optional[Subject] = None,
@@ -39,15 +38,20 @@ def _multicast(subject: Optional[Subject] = None,
 
     def multicast(source: Observable) -> Union[Observable, ConnectableObservable]:
         if subject_factory:
-            def subscribe_observer(observer: typing.Observer,
-                                   scheduler: Optional[typing.Scheduler] = None
-                                   ) -> typing.Disposable:
+            def subscribe(on_next: Optional[typing.OnNext] = None,
+                          on_error: Optional[typing.OnError] = None,
+                          on_completed: Optional[typing.OnCompleted] = None,
+                          scheduler: Optional[typing.Scheduler] = None
+                          ) -> typing.Disposable:
                 connectable = source.pipe(_multicast(subject=subject_factory(scheduler)))
-                subscription = _subscribe(mapper(connectable),
-                                          observer,
-                                          scheduler=scheduler)
+                subscription = mapper(connectable).subscribe(
+                    on_next,
+                    on_error,
+                    on_completed,
+                    scheduler=scheduler
+                )
 
                 return CompositeDisposable(subscription, connectable.connect(scheduler))
-            return Observable(subscribe_observer=subscribe_observer)
+            return Observable(subscribe)
         return ConnectableObservable(source, subject)
     return multicast

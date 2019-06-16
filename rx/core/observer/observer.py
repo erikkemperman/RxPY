@@ -88,7 +88,7 @@ class Observer(typing.Observer, typing.Disposable):
         underlying observer."""
 
         def func(notifier):
-            return notifier.accept(self)
+            return notifier.accept(self.on_next, self.on_error, self.on_completed)
         return func
 
     def as_observer(self) -> 'Observer':

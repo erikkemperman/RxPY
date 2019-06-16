@@ -30,10 +30,12 @@ def _generate_with_relative_time(initial_state: Any,
         The generated sequence.
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        scheduler = scheduler or timeout_scheduler
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        _scheduler = scheduler or timeout_scheduler
         mad = MultipleAssignmentDisposable()
         state = initial_state
         has_result = False
@@ -48,8 +50,8 @@ def _generate_with_relative_time(initial_state: Any,
             nonlocal first
             nonlocal time
 
-            if has_result:
-                observer.on_next(result)
+            if has_result and on_next is not None:
+                on_next(result)
 
             try:
                 if first:
@@ -64,14 +66,15 @@ def _generate_with_relative_time(initial_state: Any,
                     time = time_mapper(state)
 
             except Exception as e:  # pylint: disable=broad-except
-                observer.on_error(e)
+                if on_error is not None:
+                    on_error(e)
                 return
 
             if has_result:
                 mad.disposable = scheduler.schedule_relative(time, action)
-            else:
-                observer.on_completed()
+            elif on_completed is not None:
+                on_completed()
 
-        mad.disposable = scheduler.schedule_relative(0, action)
+        mad.disposable = _scheduler.schedule_relative(0, action)
         return mad
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

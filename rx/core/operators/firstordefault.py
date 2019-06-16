@@ -8,27 +8,34 @@ from rx.internal.exceptions import SequenceContainsNoElementsError
 
 def _first_or_default_async(has_default=False, default_value=None):
     def first_or_default_async(source: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            def on_next(x):
-                observer.on_next(x)
-                observer.on_completed()
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            def _on_next(x):
+                if on_next is not None:
+                    on_next(x)
+                if on_completed is not None:
+                    on_completed()
 
-            def on_completed():
+            def _on_completed():
                 if not has_default:
-                    observer.on_error(SequenceContainsNoElementsError())
+                    if on_error is not None:
+                        on_error(SequenceContainsNoElementsError())
                 else:
-                    observer.on_next(default_value)
-                    observer.on_completed()
+                    if on_next is not None:
+                        on_next(default_value)
+                    if on_completed is not None:
+                        on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return first_or_default_async
 
 

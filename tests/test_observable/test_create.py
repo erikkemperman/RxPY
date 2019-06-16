@@ -1,9 +1,7 @@
 import unittest
 
 import rx
-from rx.disposable import Disposable
 from rx.testing import TestScheduler, ReactiveTest
-from rx.disposable import BooleanDisposable
 
 on_next = ReactiveTest.on_next
 on_completed = ReactiveTest.on_completed
@@ -29,11 +27,12 @@ class TestCreate(unittest.TestCase):
         scheduler = TestScheduler()
 
         def _create():
-            def subscribe(o, scheduler=None):
-                o.on_next(1)
-                o.on_next(2)
+            def subscribe(on_next=None, on_error=None, on_completed=None,
+                          scheduler=None):
+                on_next(1)
+                on_next(2)
                 return lambda: None
-            return rx.create(subscribe_observer=subscribe)
+            return rx.create(subscribe)
 
         results = scheduler.start(_create)
         assert results.messages == [on_next(200, 1), on_next(200, 2)]
@@ -42,13 +41,14 @@ class TestCreate(unittest.TestCase):
         scheduler = TestScheduler()
 
         def _create():
-            def subscribe(o, scheduler=None):
-                o.on_completed()
-                o.on_next(100)
-                o.on_error('ex')
-                o.on_completed()
+            def subscribe(on_next=None, on_error=None, on_completed=None,
+                          scheduler=None):
+                on_completed()
+                on_next(100)
+                on_error('ex')
+                on_completed()
                 return lambda: None
-            return rx.create(subscribe_observer=subscribe)
+            return rx.create(subscribe)
 
         results = scheduler.start(_create)
         assert results.messages == [on_completed(200)]
@@ -58,78 +58,82 @@ class TestCreate(unittest.TestCase):
         ex = 'ex'
 
         def _create():
-            def subscribe(o, scheduler=None):
-                o.on_error(ex)
-                o.on_next(100)
-                o.on_error('foo')
-                o.on_completed()
+            def subscribe(on_next=None, on_error=None, on_completed=None,
+                          scheduler=None):
+                on_error(ex)
+                on_next(100)
+                on_error('foo')
+                on_completed()
                 return lambda: None
-            return rx.create(subscribe_observer=subscribe)
+            return rx.create(subscribe)
 
         results = scheduler.start(_create)
         assert results.messages == [on_error(200, ex)]
 
-
     def test_create_exception(self):
         with self.assertRaises(RxException):
-            rx.create(subscribe_observer=lambda o, s: _raise('ex')).subscribe()
+            rx.create(lambda n, e, c, s: _raise('ex')).subscribe()
 
     def test_create_dispose(self):
         scheduler = TestScheduler()
 
         def _create():
-            def subscribe(o, scheduler=None):
+            def subscribe(on_next=None, on_error=None, on_completed=None,
+                          scheduler=None):
                 is_stopped = [False]
-                o.on_next(1)
-                o.on_next(2)
+                on_next(1)
+                on_next(2)
 
                 def action1(scheduler, state):
                     if not is_stopped[0]:
-                        return o.on_next(3)
+                        return on_next(3)
                 scheduler.schedule_relative(600, action1)
 
                 def action2(scheduler, state):
                     if not is_stopped[0]:
-                        return o.on_next(4)
+                        return on_next(4)
                 scheduler.schedule_relative(700, action2)
 
                 def action3(scheduler, state):
                     if not is_stopped[0]:
-                        return o.on_next(5)
+                        return on_next(5)
                 scheduler.schedule_relative(900, action3)
 
                 def action4(scheduler, state):
                     if not is_stopped[0]:
-                        return o.on_next(6)
+                        return on_next(6)
                 scheduler.schedule_relative(1100, action4)
 
                 def dispose():
                     is_stopped[0] = True
                 return dispose
-            return rx.create(subscribe_observer=subscribe)
+            return rx.create(subscribe)
 
         results = scheduler.start(_create)
         assert results.messages == [on_next(200, 1), on_next(200, 2), on_next(800, 3), on_next(900, 4)]
 
     def test_create_observer_throws(self):
-        def subscribe(o, scheduler=None):
-            o.on_next(1)
+        def subscribe(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
+            on_next(1)
             return lambda: None
 
         with self.assertRaises(RxException):
-            rx.create(subscribe_observer=subscribe).subscribe(lambda x: _raise('ex'))
+            rx.create(subscribe).subscribe(lambda x: _raise('ex'))
 
-        def subscribe2(o, scheduler=None):
-            o.on_error('exception')
+        def subscribe2(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
+            on_error('exception')
             return lambda: None
 
         with self.assertRaises(RxException):
-            rx.create(subscribe_observer=subscribe2).subscribe(on_error=lambda ex: _raise('ex'))
+            rx.create(subscribe2).subscribe(on_error=lambda ex: _raise('ex'))
 
-        def subscribe3(o, scheduler=None):
-            o.on_completed()
+        def subscribe3(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
+            on_completed()
             return lambda: None
 
         with self.assertRaises(RxException):
-            rx.create(subscribe_observer=subscribe3).subscribe(on_completed=lambda: _raise('ex'))
+            rx.create(subscribe3).subscribe(on_completed=lambda: _raise('ex'))
 

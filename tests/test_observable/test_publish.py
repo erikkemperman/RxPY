@@ -3,7 +3,6 @@ import unittest
 import rx
 from rx import operators as ops
 from rx.core import ConnectableObservable, Observable, Observer
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 on_next = ReactiveTest.on_next
@@ -32,11 +31,13 @@ class MySubject(Observable, Observer):
         self.dispose_on_map = {}
         self.subscribe_count = 0
         self.disposed = False
-        self.observer = None
 
-    def _subscribe_core(self, observer, scheduler=None):
+    def _subscribe_core(self, on_next=None, on_error=None, on_completed=None,
+                        *, scheduler=None):
         self.subscribe_count += 1
-        self.observer = observer
+        self._next = on_next
+        self._error = on_error
+        self._completed = on_completed
 
         class Duck:
             def __init__(self, this):
@@ -50,15 +51,15 @@ class MySubject(Observable, Observer):
         self.dispose_on_map[value] = disposable
 
     def on_next(self, value):
-        self.observer.on_next(value)
+        self._next(value)
         if value in self.dispose_on_map:
             self.dispose_on_map[value].dispose()
 
     def on_error(self, error):
-        self.observer.on_error(error)
+        self._error(error)
 
     def on_completed(self):
-        self.observer.on_completed()
+        self._completed()
 
 
 class TestPublish(unittest.TestCase):
@@ -126,12 +127,13 @@ class TestPublish(unittest.TestCase):
         def factory(scheduler):
             count[0] += 1
 
-            def create(obs, scheduler=None):
+            def create(on_next=None, on_error=None, on_completed=None,
+                       scheduler=None):
                 def func():
                     disconnected[0] = True
                 return func
 
-            return rx.create(subscribe_observer=create)
+            return rx.create(create)
 
         xs = rx.defer(factory)
 
@@ -186,7 +188,9 @@ class TestPublish(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(subscribed, action1)
 
         def action2(scheduler, state):
@@ -255,7 +259,9 @@ class TestPublish(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(subscribed, action1)
 
         def action2(scheduler, state):
@@ -317,7 +323,9 @@ class TestPublish(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(subscribed, action1)
 
         def action2(scheduler, state):
@@ -379,7 +387,9 @@ class TestPublish(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(subscribed, action1)
 
         def action2(scheduler, state):

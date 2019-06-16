@@ -10,31 +10,35 @@ def last_or_default_async(source: Observable,
                           has_default: bool = False,
                           default_value: Any = None
                           ) -> Callable[[Observable], Observable]:
-
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         value = [default_value]
         seen_value = [False]
 
-        def on_next(x):
+        def _on_next(x):
             value[0] = x
             seen_value[0] = True
 
-        def on_completed():
+        def _on_completed():
             if not seen_value[0] and not has_default:
-                observer.on_error(SequenceContainsNoElementsError())
+                if on_error is not None:
+                    on_error(SequenceContainsNoElementsError())
             else:
-                observer.on_next(value[0])
-                observer.on_completed()
+                if on_next is not None:
+                    on_next(value[0])
+                if on_completed is not None:
+                    on_completed()
 
         return source.subscribe(
-            on_next,
-            observer.on_error,
-            on_completed,
+            _on_next,
+            on_error,
+            _on_completed,
             scheduler=scheduler
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def _last_or_default(predicate: Optional[Predicate] = None,

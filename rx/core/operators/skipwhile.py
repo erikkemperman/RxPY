@@ -23,31 +23,34 @@ def _skip_while(predicate: typing.Predicate) -> Callable[[Observable], Observabl
             series that does not pass the test specified by predicate.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             running = False
 
-            def on_next(value):
+            def _on_next(value):
                 nonlocal running
 
                 if not running:
                     try:
                         running = not predicate(value)
                     except Exception as exn:
-                        observer.on_error(exn)
+                        if on_error is not None:
+                            on_error(exn)
                         return
 
-                if running:
-                    observer.on_next(value)
+                if running and on_next is not None:
+                    on_next(value)
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return skip_while
 
 

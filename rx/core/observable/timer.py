@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from rx.scheduler import timeout_scheduler
 from rx.core import Observable, typing
@@ -7,82 +7,113 @@ from rx.disposable import MultipleAssignmentDisposable
 
 
 def observable_timer_date(duetime, scheduler: Optional[typing.Scheduler] = None):
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_
 
-        def action(scheduler, state):
-            observer.on_next(0)
-            observer.on_completed()
+    obs_scheduler = scheduler
 
-        return _scheduler.schedule_absolute(duetime, action)
-    return Observable(subscribe_observer=subscribe_observer)
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or timeout_scheduler
+
+        def action(_: typing.Scheduler, __: Any = None) -> None:
+            if on_next is not None:
+                on_next(0)
+            if on_completed is not None:
+                on_completed()
+
+        return sub_scheduler.schedule_absolute(duetime, action)
+    return Observable(subscribe)
 
 
-def observable_timer_duetime_and_period(duetime, period, scheduler: Optional[typing.Scheduler] = None) -> Observable:
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or timeout_scheduler
+def observable_timer_duetime_and_period(duetime,
+                                        period,
+                                        scheduler: Optional[typing.Scheduler] = None
+                                        ) -> Observable:
+
+    obs_scheduler = scheduler
+
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or timeout_scheduler
         nonlocal duetime
 
         if not isinstance(duetime, datetime):
-            duetime = _scheduler.now + _scheduler.to_timedelta(duetime)
+            duetime = sub_scheduler.now + sub_scheduler.to_timedelta(duetime)
 
-        p = max(0.0, _scheduler.to_seconds(period))
+        p = max(0.0, sub_scheduler.to_seconds(period))
         mad = MultipleAssignmentDisposable()
         dt = [duetime]
         count = [0]
 
-        def action(scheduler, state):
+        def action(act_scheduler: typing.Scheduler, _: Any = None) -> None:
             if p > 0.0:
-                now = scheduler.now
-                dt[0] = dt[0] + scheduler.to_timedelta(p)
+                now = act_scheduler.now
+                dt[0] = dt[0] + act_scheduler.to_timedelta(p)
                 if dt[0] <= now:
-                    dt[0] = now + scheduler.to_timedelta(p)
+                    dt[0] = now + act_scheduler.to_timedelta(p)
 
-            observer.on_next(count[0])
+            if on_next is not None:
+                on_next(count[0])
             count[0] += 1
-            mad.disposable = scheduler.schedule_absolute(dt[0], action)
-        mad.disposable = _scheduler.schedule_absolute(dt[0], action)
+            mad.disposable = act_scheduler.schedule_absolute(dt[0], action)
+
+        mad.disposable = sub_scheduler.schedule_absolute(dt[0], action)
         return mad
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
-def observable_timer_timespan(duetime: typing.RelativeTime, scheduler: Optional[typing.Scheduler] = None) -> Observable:
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or timeout_scheduler
-        d = _scheduler.to_seconds(duetime)
+def observable_timer_timespan(duetime: typing.RelativeTime,
+                              scheduler: Optional[typing.Scheduler] = None
+                              ) -> Observable:
+    obs_scheduler = scheduler
 
-        def action(scheduler, state):
-            observer.on_next(0)
-            observer.on_completed()
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or timeout_scheduler
+
+        d = sub_scheduler.to_seconds(duetime)
+
+        def action(_: typing.Scheduler, __: Any = None) -> None:
+            if on_next is not None:
+                on_next(0)
+            if on_completed is not None:
+                on_completed()
 
         if d <= 0.0:
-            return _scheduler.schedule(action)
-        return _scheduler.schedule_relative(d, action)
-    return Observable(subscribe_observer=subscribe_observer)
+            return sub_scheduler.schedule(action)
+        return sub_scheduler.schedule_relative(d, action)
+    return Observable(subscribe)
 
 
 def observable_timer_timespan_and_period(duetime: typing.RelativeTime,
                                          period: typing.RelativeTime,
                                          scheduler: Optional[typing.Scheduler] = None
                                          ) -> Observable:
-    if duetime == period:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            _scheduler = scheduler or scheduler_ or timeout_scheduler
+    obs_scheduler = scheduler
 
-            def action(count):
-                observer.on_next(count)
+    if duetime == period:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            sub_scheduler = obs_scheduler or scheduler or timeout_scheduler
+
+            def action(count: int) -> int:
+                if on_next is not None:
+                    on_next(count)
                 return count + 1
 
-            return _scheduler.schedule_periodic(period, action, state=0)
-        return Observable(subscribe_observer=subscribe_observer)
+            return sub_scheduler.schedule_periodic(period, action, state=0)
+        return Observable(subscribe)
     return observable_timer_duetime_and_period(duetime, period, scheduler)
 
 

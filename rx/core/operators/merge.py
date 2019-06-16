@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Callable, Optional
 
 import rx
@@ -33,58 +34,65 @@ def _merge(*sources: Observable,
             sources_ = tuple([source]) + sources
             return rx.merge(*sources_)
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             active_count = [0]
             group = CompositeDisposable()
             is_stopped = [False]
-            queue = []
+            queue = deque()
 
-            def subscribe(xs):
+            def _subscribe(xs):
                 subscription = SingleAssignmentDisposable()
                 group.add(subscription)
 
                 @synchronized(source.lock)
-                def on_completed():
+                def _completed():
                     group.remove(subscription)
                     if queue:
-                        s = queue.pop(0)
-                        subscribe(s)
+                        s = queue.popleft()
+                        _subscribe(s)
                     else:
                         active_count[0] -= 1
-                        if is_stopped[0] and active_count[0] == 0:
-                            observer.on_completed()
+                        if is_stopped[0] and active_count[0] == 0 \
+                                and on_completed is not None:
+                            on_completed()
 
-                on_next = synchronized(source.lock)(observer.on_next)
-                on_error = synchronized(source.lock)(observer.on_error)
+                _next = None
+                if on_next is not None:
+                    _next = synchronized(source.lock)(on_next)
+                _error = None
+                if on_error is not None:
+                    _error = synchronized(source.lock)(on_error)
                 subscription.disposable = xs.subscribe(
-                    on_next,
-                    on_error,
-                    on_completed,
+                    _next,
+                    _error,
+                    _completed,
                     scheduler=scheduler
                 )
 
-            def on_next(inner_source):
+            def _on_next(inner_source):
                 if active_count[0] < max_concurrent:
                     active_count[0] += 1
-                    subscribe(inner_source)
+                    _subscribe(inner_source)
                 else:
                     queue.append(inner_source)
 
-            def on_completed():
+            def _on_completed():
                 is_stopped[0] = True
-                if active_count[0] == 0:
-                    observer.on_completed()
+                if active_count[0] == 0 and on_completed is not None:
+                    on_completed()
 
             group.add(source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             ))
             return group
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return merge
 
 
@@ -103,48 +111,55 @@ def _merge_all() -> Callable[[Observable], Observable]:
             sequences.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             group = CompositeDisposable()
             is_stopped = [False]
             m = SingleAssignmentDisposable()
             group.add(m)
 
-            def on_next(inner_source):
+            def _on_next(inner_source):
                 inner_subscription = SingleAssignmentDisposable()
                 group.add(inner_subscription)
 
                 inner_source = from_future(inner_source) if is_future(inner_source) else inner_source
 
                 @synchronized(source.lock)
-                def on_completed():
+                def _completed():
                     group.remove(inner_subscription)
-                    if is_stopped[0] and len(group) == 1:
-                        observer.on_completed()
+                    if is_stopped[0] and len(group) == 1 \
+                            and on_completed is not None:
+                        on_completed()
 
-                on_next = synchronized(source.lock)(observer.on_next)
-                on_error = synchronized(source.lock)(observer.on_error)
+                _next = None
+                if on_next is not None:
+                    _next = synchronized(source.lock)(on_next)
+                _error = None
+                if on_error is not None:
+                    _error = synchronized(source.lock)(on_error)
                 subscription = inner_source.subscribe(
-                    on_next,
-                    on_error,
-                    on_completed,
+                    _next,
+                    _error,
+                    _completed,
                     scheduler=scheduler
                 )
                 inner_subscription.disposable = subscription
 
-            def on_completed():
+            def _on_completed():
                 is_stopped[0] = True
-                if len(group) == 1:
-                    observer.on_completed()
+                if len(group) == 1 and on_completed is not None:
+                    on_completed()
 
             m.disposable = source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
             return group
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return merge_all

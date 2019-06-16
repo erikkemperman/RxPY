@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Callable, Optional
 
 from rx.core import Observable, typing
@@ -19,12 +20,14 @@ def _expand(mapper: Mapper) -> Callable[[Observable], Observable]:
             by the recursive expansion.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            scheduler = scheduler or immediate_scheduler
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            _scheduler = scheduler or immediate_scheduler
 
-            queue = []
+            queue = deque()
             m = SerialDisposable()
             d = CompositeDisposable(m)
             active_count = [0]
@@ -38,7 +41,7 @@ def _expand(mapper: Mapper) -> Callable[[Observable], Observable]:
 
                 def action(scheduler, state):
                     if queue:
-                        work = queue.pop(0)
+                        work = queue.popleft()
                     else:
                         is_acquired[0] = False
                         return
@@ -46,39 +49,41 @@ def _expand(mapper: Mapper) -> Callable[[Observable], Observable]:
                     sad = SingleAssignmentDisposable()
                     d.add(sad)
 
-                    def on_next(value):
-                        observer.on_next(value)
+                    def _on_next(value):
+                        if on_next is not None:
+                            on_next(value)
                         result = None
                         try:
                             result = mapper(value)
                         except Exception as ex:
-                            observer.on_error(ex)
+                            if on_error is not None:
+                                on_error(ex)
                             return
 
                         queue.append(result)
                         active_count[0] += 1
                         ensure_active()
 
-                    def on_complete():
+                    def _on_complete():
                         d.remove(sad)
                         active_count[0] -= 1
-                        if active_count[0] == 0:
-                            observer.on_completed()
+                        if active_count[0] == 0 and on_completed is not None:
+                            on_completed()
 
                     sad.disposable = work.subscribe(
-                        on_next,
-                        observer.on_error,
-                        on_complete,
-                        scheduler=scheduler
+                        _on_next,
+                        on_error,
+                        _on_complete,
+                        scheduler=_scheduler
                     )
-                    m.disposable = scheduler.schedule(action)
+                    m.disposable = _scheduler.schedule(action)
 
                 if is_owner:
-                    m.disposable = scheduler.schedule(action)
+                    m.disposable = _scheduler.schedule(action)
 
             queue.append(source)
             active_count[0] += 1
             ensure_active()
             return d
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return expand

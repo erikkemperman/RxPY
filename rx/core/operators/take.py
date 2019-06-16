@@ -25,25 +25,28 @@ def _take(count: int) -> Callable[[Observable], Observable]:
         if not count:
             return empty()
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             remaining = count
 
-            def on_next(value):
+            def _on_next(value):
                 nonlocal remaining
 
                 if remaining > 0:
                     remaining -= 1
-                    observer.on_next(value)
-                    if not remaining:
-                        observer.on_completed()
+                    if on_next is not None:
+                        on_next(value)
+                    if not remaining and on_completed is not None:
+                        on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take

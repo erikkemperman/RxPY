@@ -20,10 +20,14 @@ def from_iterable(iterable: Iterable, scheduler: Optional[typing.Scheduler] = No
         given iterable sequence.
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or current_thread_scheduler
+    obs_scheduler = scheduler
+
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or current_thread_scheduler
         iterator = iter(iterable)
         disposed = False
 
@@ -33,16 +37,19 @@ def from_iterable(iterable: Iterable, scheduler: Optional[typing.Scheduler] = No
             try:
                 while not disposed:
                     value = next(iterator)
-                    observer.on_next(value)
+                    if on_next is not None:
+                        on_next(value)
             except StopIteration:
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
             except Exception as error:  # pylint: disable=broad-except
-                observer.on_error(error)
+                if on_error is not None:
+                    on_error(error)
 
         def dispose() -> None:
             nonlocal disposed
             disposed = True
 
         disp = Disposable(dispose)
-        return CompositeDisposable(_scheduler.schedule(action), disp)
-    return Observable(subscribe_observer=subscribe_observer)
+        return CompositeDisposable(sub_scheduler.schedule(action), disp)
+    return Observable(subscribe)

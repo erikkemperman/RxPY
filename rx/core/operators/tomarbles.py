@@ -22,46 +22,52 @@ def _to_marbles(scheduler: Optional[Scheduler] = None, timespan: RelativeTime = 
             Observable stream.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             _scheduler = scheduler or new_thread_scheduler
 
             result: List[str] = []
-            last = scheduler.now
+            last = _scheduler.now
 
             def add_timespan():
                 nonlocal last
 
-                now = scheduler.now
+                now = _scheduler.now
                 diff = now - last
                 last = now
-                secs = scheduler.to_seconds(diff)
+                secs = _scheduler.to_seconds(diff)
                 dashes = "-" * int((secs + timespan / 2.0) * (1.0 / timespan))
                 result.append(dashes)
 
-            def on_next(value):
+            def _on_next(value):
                 add_timespan()
                 result.append(stringify(value))
 
-            def on_error(exception):
+            def _on_error(exception):
                 add_timespan()
                 result.append(stringify(exception))
-                observer.on_next("".join(n for n in result))
-                observer.on_completed()
+                if on_next is not None:
+                    on_next("".join(n for n in result))
+                if on_completed is not None:
+                    on_completed()
 
-            def on_completed():
+            def _on_completed():
                 add_timespan()
                 result.append("|")
-                observer.on_next("".join(n for n in result))
-                observer.on_completed()
+                if on_next is not None:
+                    on_next("".join(n for n in result))
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                on_error,
-                on_completed
+                _on_next,
+                _on_error,
+                _on_completed
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return to_marbles
 
 

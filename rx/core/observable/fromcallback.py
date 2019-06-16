@@ -24,30 +24,35 @@ def _from_callback(func: Callable, mapper: Optional[Mapper] = None) -> Callable[
     def function(*args):
         arguments = list(args)
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             def handler(*args):
                 results = list(args)
                 if mapper:
                     try:
                         results = mapper(args)
-                    except Exception as err: # pylint: disable=broad-except
-                        observer.on_error(err)
+                    except Exception as err:  # pylint: disable=broad-except
+                        if on_error is not None:
+                            on_error(err)
                         return
 
-                    observer.on_next(results)
-                else:
+                    if on_next is not None:
+                        on_next(results)
+                elif on_next is not None:
                     if isinstance(results, list) and len(results) <= 1:
-                        observer.on_next(*results)
+                        on_next(*results)
                     else:
-                        observer.on_next(results)
+                        on_next(results)
 
-                    observer.on_completed()
+                    if on_completed is not None:
+                        on_completed()
 
             arguments.append(handler)
             func(*arguments)
             return Disposable()
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return function

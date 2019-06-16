@@ -2,7 +2,6 @@ import unittest
 
 from rx.testing import TestScheduler, ReactiveTest, is_prime
 from rx.disposable import SerialDisposable
-from rx.internal.utils import subscribe as _subscribe
 from rx.operators import filter, filter_indexed
 
 on_next = ReactiveTest.on_next
@@ -216,7 +215,11 @@ class TestFilter(unittest.TestCase):
         scheduler.schedule_absolute(created, action)
 
         def action1(scheduler, state):
-            d.disposable = _subscribe(ys[0], results)
+            d.disposable = ys[0].subscribe(
+                results.on_next,
+                results.on_error,
+                results.on_completed
+            )
 
         scheduler.schedule_absolute(subscribed, action1)
 
@@ -367,7 +370,11 @@ class TestFilter(unittest.TestCase):
         scheduler.schedule_absolute(created, action1)
 
         def action2(scheduler, state):
-            d.disposable = _subscribe(ys[0], results)
+            d.disposable = ys[0].subscribe(
+                results.on_next,
+                results.on_error,
+                results.on_completed
+            )
 
         scheduler.schedule_absolute(subscribed, action2)
 

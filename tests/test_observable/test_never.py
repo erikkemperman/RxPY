@@ -1,7 +1,6 @@
 import unittest
 
 from rx import never
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 on_next = ReactiveTest.on_next
@@ -18,6 +17,6 @@ class TestNever(unittest.TestCase):
         scheduler = TestScheduler()
         xs = never()
         results = scheduler.create_observer()
-        _subscribe(xs, results)
+        xs.subscribe(results.on_next, results.on_error, results.on_completed)
         scheduler.start()
         assert results.messages == []

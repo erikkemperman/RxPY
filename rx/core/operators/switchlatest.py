@@ -20,15 +20,17 @@ def _switch_latest() -> Callable[[Observable], Observable]:
             that has been received.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             inner_subscription = SerialDisposable()
             has_latest = [False]
             is_stopped = [False]
             latest = [0]
 
-            def on_next(inner_source: Observable):
+            def _on_next(inner_source: Observable):
                 nonlocal source
 
                 d = SingleAssignmentDisposable()
@@ -41,38 +43,38 @@ def _switch_latest() -> Callable[[Observable], Observable]:
                 # Check if Future or Observable
                 inner_source = from_future(inner_source) if is_future(inner_source) else inner_source
 
-                def on_next(x: Any) -> None:
-                    if latest[0] == _id:
-                        observer.on_next(x)
+                def _next(x: Any) -> None:
+                    if latest[0] == _id and on_next is not None:
+                        on_next(x)
 
-                def on_error(e: Exception) -> None:
-                    if latest[0] == _id:
-                        observer.on_error(e)
+                def _error(e: Exception) -> None:
+                    if latest[0] == _id and on_error is not None:
+                        on_error(e)
 
-                def on_completed() -> None:
+                def _completed() -> None:
                     if latest[0] == _id:
                         has_latest[0] = False
-                        if is_stopped[0]:
-                            observer.on_completed()
+                        if is_stopped[0] and on_completed is not None:
+                            on_completed()
 
                 d.disposable = inner_source.subscribe(
-                    on_next,
-                    on_error,
-                    on_completed,
+                    _next,
+                    _error,
+                    _completed,
                     scheduler=scheduler
                 )
 
-            def on_completed() -> None:
+            def _on_completed() -> None:
                 is_stopped[0] = True
-                if not has_latest[0]:
-                    observer.on_completed()
+                if not has_latest[0] and on_completed is not None:
+                    on_completed()
 
             subscription = source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
             return CompositeDisposable(subscription, inner_subscription)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return switch_latest

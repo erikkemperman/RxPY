@@ -3,7 +3,6 @@ from typing import Callable, Optional
 from rx import throw
 from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable, Disposable
-from rx.internal.utils import subscribe as _subscribe
 
 
 def _using(resource_factory: Callable[[], typing.Disposable],
@@ -26,9 +25,11 @@ def _using(resource_factory: Callable[[], typing.Disposable],
         of the dependent resource object.
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         disp = Disposable()
 
         try:
@@ -38,11 +39,21 @@ def _using(resource_factory: Callable[[], typing.Disposable],
 
             source = observable_factory(resource)
         except Exception as exception:  # pylint: disable=broad-except
-            d = _subscribe(throw(exception), observer, scheduler=scheduler)
+            d = throw(exception).subscribe(
+                on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler
+            )
             return CompositeDisposable(d, disp)
 
         return CompositeDisposable(
-            _subscribe(source, observer, scheduler=scheduler),
+            source.subscribe(
+                on_next,
+                on_error,
+                on_completed,
+                scheduler=scheduler
+            ),
             disp
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

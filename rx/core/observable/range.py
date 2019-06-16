@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Iterator, Optional
 
 from rx.core import typing
 from rx.core import Observable
@@ -30,6 +30,8 @@ def _range(start: int,
         integral numbers.
     """
 
+    obs_scheduler = scheduler
+
     if step is None and stop is None:
         range_t = range(start)
     elif step is None:
@@ -37,21 +39,24 @@ def _range(start: int,
     else:
         range_t = range(start, stop, step)
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        nonlocal range_t
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or current_thread_scheduler
 
-        _scheduler = scheduler or scheduler_ or current_thread_scheduler
         sd = MultipleAssignmentDisposable()
 
-        def action(scheduler, iterator):
+        def action(act_scheduler: typing.Scheduler, it: Iterator[int]) -> None:
             try:
-                observer.on_next(next(iterator))
-                sd.disposable = _scheduler.schedule(action, state=iterator)
+                if on_next is not None:
+                    on_next(next(it))
+                sd.disposable = act_scheduler.schedule(action, state=it)
             except StopIteration:
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
-        sd.disposable = _scheduler.schedule(action, iter(range_t))
+        sd.disposable = sub_scheduler.schedule(action, iter(range_t))
         return sd
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

@@ -81,12 +81,13 @@ class TestObserveOn(unittest.TestCase):
 
         actual_subscribe_scheduler = None
 
-        def subscribe(observer, scheduler):
+        def subscribe(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
             nonlocal actual_subscribe_scheduler
             actual_subscribe_scheduler = scheduler
-            observer.on_completed()
+            on_completed()
 
-        xs = rx.create(subscribe_observer=subscribe)
+        xs = rx.create(subscribe)
 
         xs.pipe(ops.observe_on(scheduler)).subscribe(
             scheduler=expected_subscribe_scheduler)

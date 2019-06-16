@@ -17,9 +17,11 @@ def _exclusive() -> Callable[[Observable], Observable]:
     """
 
     def exclusive(source: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             has_current = [False]
             is_stopped = [False]
             m = SingleAssignmentDisposable()
@@ -27,7 +29,7 @@ def _exclusive() -> Callable[[Observable], Observable]:
 
             g.add(m)
 
-            def on_next(inner_source):
+            def _on_next(inner_source):
                 if not has_current[0]:
                     has_current[0] = True
 
@@ -39,27 +41,29 @@ def _exclusive() -> Callable[[Observable], Observable]:
                     def on_completed_inner():
                         g.remove(inner_subscription)
                         has_current[0] = False
-                        if is_stopped[0] and len(g) == 1:
-                            observer.on_completed()
+                        if is_stopped[0] and len(g) == 1 \
+                                and on_completed is not None:
+                            on_completed()
 
                     inner_subscription.disposable = inner_source.subscribe(
-                        observer.on_next,
-                        observer.on_error,
+                        on_next,
+                        on_error,
                         on_completed_inner,
                         scheduler=scheduler
                     )
 
-            def on_completed():
+            def _on_completed():
                 is_stopped[0] = True
-                if not has_current[0] and len(g) == 1:
-                    observer.on_completed()
+                if not has_current[0] and len(g) == 1 \
+                        and on_completed is not None:
+                    on_completed()
 
             m.disposable = source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
             return g
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return exclusive

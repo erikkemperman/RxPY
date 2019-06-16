@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from rx.disposable import Disposable, CompositeDisposable
 from rx.core import Observable, typing
@@ -15,14 +15,19 @@ class ColdObservable(Observable):
         self.messages = messages
         self.subscriptions: List[Subscription] = []
 
-    def _subscribe_core(self, observer=None, scheduler=None) -> typing.Disposable:
+    def _subscribe_core(self,
+                        on_next: Optional[typing.OnNext] = None,
+                        on_error: Optional[typing.OnError] = None,
+                        on_completed: Optional[typing.OnCompleted] = None,
+                        scheduler: Optional[typing.Scheduler] = None
+                        ) -> typing.Disposable:
         self.subscriptions.append(Subscription(self.scheduler.clock))
         index = len(self.subscriptions) - 1
         disp = CompositeDisposable()
 
         def get_action(notification):
             def action(scheduler, state):
-                notification.accept(observer)
+                notification.accept(on_next, on_error, on_completed)
                 return Disposable()
             return action
 

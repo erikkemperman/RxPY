@@ -38,14 +38,16 @@ def _group_by_until(key_mapper: Mapper,
     element_mapper = element_mapper or identity
 
     def group_by_until(source: Observable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             writers = OrderedDict()
             group_disposable = CompositeDisposable()
             ref_count_disposable = RefCountDisposable(group_disposable)
 
-            def on_next(x):
+            def _on_next(x):
                 writer = None
                 key = None
 
@@ -55,7 +57,8 @@ def _group_by_until(key_mapper: Mapper,
                     for wrt in writers.values():
                         wrt.on_error(e)
 
-                    observer.on_error(e)
+                    if on_error is not None:
+                        on_error(e)
                     return
 
                 fire_new_map_entry = False
@@ -74,10 +77,12 @@ def _group_by_until(key_mapper: Mapper,
                         for wrt in writers.values():
                             wrt.on_error(e)
 
-                        observer.on_error(e)
+                        if on_error is not None:
+                            on_error(e)
                         return
 
-                    observer.on_next(group)
+                    if on_next is not None:
+                        on_next(group)
                     sad = SingleAssignmentDisposable()
                     group_disposable.add(sad)
 
@@ -88,21 +93,22 @@ def _group_by_until(key_mapper: Mapper,
 
                         group_disposable.remove(sad)
 
-                    def on_next(value):
+                    def _next(value):
                         pass
 
-                    def on_error(exn):
+                    def _error(exn):
                         for wrt in writers.values():
                             wrt.on_error(exn)
-                        observer.on_error(exn)
+                        if on_error is not None:
+                            on_error(exn)
 
-                    def on_completed():
+                    def _completed():
                         expire()
 
                     sad.disposable = duration.pipe(ops.take(1)).subscribe(
-                        on_next,
-                        on_error,
-                        on_completed,
+                        _next,
+                        _error,
+                        _completed,
                         scheduler=scheduler
                     )
 
@@ -112,29 +118,32 @@ def _group_by_until(key_mapper: Mapper,
                     for wrt in writers.values():
                         wrt.on_error(error)
 
-                    observer.on_error(error)
+                    if on_error is not None:
+                        on_error(error)
                     return
 
                 writer.on_next(element)
 
-            def on_error(ex):
+            def _on_error(ex):
                 for wrt in writers.values():
                     wrt.on_error(ex)
 
-                observer.on_error(ex)
+                if on_error is not None:
+                    on_error(ex)
 
-            def on_completed():
+            def _on_completed():
                 for wrt in writers.values():
                     wrt.on_completed()
 
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
             group_disposable.add(source.subscribe(
-                on_next,
-                on_error,
-                on_completed,
+                _on_next,
+                _on_error,
+                _on_completed,
                 scheduler=scheduler
             ))
             return ref_count_disposable
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return group_by_until

@@ -47,23 +47,27 @@ def _zip_with_iterable(seq: Iterable) -> Callable[[Observable], Observable]:
         first = source
         second = iter(seq)
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            def on_next(left):
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            def _on_next(left):
                 try:
                     right = next(second)
                 except StopIteration:
-                    observer.on_completed()
+                    if on_completed is not None:
+                        on_completed()
                 else:
                     result = (left, right)
-                    observer.on_next(result)
+                    if on_next is not None:
+                        on_next(result)
 
             return first.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return zip_with_iterable

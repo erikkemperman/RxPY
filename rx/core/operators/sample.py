@@ -6,9 +6,11 @@ from rx.disposable import CompositeDisposable
 
 
 def sample_observable(source: Observable, sampler: Observable) -> Observable:
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         at_end = [None]
         has_value = [None]
         value = [None]
@@ -16,33 +18,34 @@ def sample_observable(source: Observable, sampler: Observable) -> Observable:
         def sample_subscribe(x=None):
             if has_value[0]:
                 has_value[0] = False
-                observer.on_next(value[0])
+                if on_next is not None:
+                    on_next(value[0])
 
-            if at_end[0]:
-                observer.on_completed()
+            if at_end[0] and on_completed is not None:
+                on_completed()
 
-        def on_next(new_value):
+        def _on_next(new_value):
             has_value[0] = True
             value[0] = new_value
 
-        def on_completed():
+        def _on_completed():
             at_end[0] = True
 
         return CompositeDisposable(
             source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             ),
             sampler.subscribe(
                 sample_subscribe,
-                observer.on_error,
+                on_error,
                 sample_subscribe,
                 scheduler=scheduler
             )
         )
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def _sample(sampler: Union[typing.RelativeTime, Observable],

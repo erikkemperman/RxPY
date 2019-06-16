@@ -1,14 +1,16 @@
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from datetime import datetime
 
 from rx.core import Observable, typing
 from rx.disposable import CompositeDisposable
-from rx.internal.utils import subscribe as _subscribe
 from rx.scheduler import timeout_scheduler
 
 
-def _take_until_with_time(end_time: typing.AbsoluteOrRelativeTime, scheduler: Optional[typing.Scheduler] = None
+def _take_until_with_time(end_time: typing.AbsoluteOrRelativeTime,
+                          scheduler: Optional[typing.Scheduler] = None
                           ) -> Callable[[Observable], Observable]:
+    op_scheduler = scheduler
+
     def take_until_with_time(source: Observable) -> Observable:
         """Takes elements for the specified duration until the specified end
         time, using the specified scheduler to run timers.
@@ -24,21 +26,25 @@ def _take_until_with_time(end_time: typing.AbsoluteOrRelativeTime, scheduler: Op
             until the specified end time.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            _scheduler = scheduler or scheduler_ or timeout_scheduler
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            sub_scheduler = op_scheduler or scheduler or timeout_scheduler
 
             if isinstance(end_time, datetime):
-                scheduler_method = _scheduler.schedule_absolute
+                scheduler_method = sub_scheduler.schedule_absolute
             else:
-                scheduler_method = _scheduler.schedule_relative
+                scheduler_method = sub_scheduler.schedule_relative
 
-            def action(scheduler, state):
-                observer.on_completed()
+            def action(_: typing.Scheduler, __: Any = None) -> None:
+                if on_completed is not None:
+                    on_completed()
 
             task = scheduler_method(end_time, action)
-            sub = _subscribe(source, observer, scheduler=scheduler_)
+            sub = source.subscribe(on_next, on_error, on_completed,
+                                   scheduler=scheduler)
             return CompositeDisposable(task, sub)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take_until_with_time

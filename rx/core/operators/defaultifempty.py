@@ -21,25 +21,29 @@ def _default_if_empty(default_value: Any = None) -> Callable[[Observable], Obser
             source.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             found = [False]
 
-            def on_next(x: Any):
+            def _on_next(x: Any):
                 found[0] = True
-                observer.on_next(x)
+                if on_next is not None:
+                    on_next(x)
 
-            def on_completed():
-                if not found[0]:
-                    observer.on_next(default_value)
-                observer.on_completed()
+            def _on_completed():
+                if not found[0] and on_next is not None:
+                    on_next(default_value)
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return default_if_empty

@@ -2,7 +2,6 @@ from typing import Callable, Optional
 
 from rx.core import Observable, typing
 from rx.disposable import Disposable
-from rx.internal.utils import subscribe as _subscribe
 
 
 def _finally_action(action: Callable) -> Callable[[Observable], Observable]:
@@ -21,11 +20,14 @@ def _finally_action(action: Callable) -> Callable[[Observable], Observable]:
             behavior applied.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             try:
-                subscription = _subscribe(source, observer, scheduler=scheduler)
+                subscription = source.subscribe(on_next, on_error, on_completed,
+                                                scheduler=scheduler)
             except Exception:
                 action()
                 raise
@@ -37,5 +39,5 @@ def _finally_action(action: Callable) -> Callable[[Observable], Observable]:
                     action()
 
             return Disposable(dispose)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return finally_action

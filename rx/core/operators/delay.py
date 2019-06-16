@@ -1,5 +1,6 @@
-from typing import Callable, Optional
+from collections import deque
 from datetime import datetime, timedelta
+from typing import Any, Callable, Optional
 
 from rx import operators as ops
 from rx.core import Observable, typing
@@ -14,49 +15,57 @@ class Timestamp(object):
         self.timestamp = timestamp
 
 
-def observable_delay_timespan(source: Observable, duetime: typing.RelativeTime,
-                              scheduler: Optional[typing.Scheduler] = None) -> Observable:
+def observable_delay_timespan(source: Observable,
+                              duetime: typing.RelativeTime,
+                              scheduler: Optional[typing.Scheduler] = None
+                              ) -> Observable:
+    op_scheduler = scheduler
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         nonlocal duetime
 
-        _scheduler = scheduler or scheduler_ or timeout_scheduler
+        sub_scheduler = op_scheduler or scheduler or timeout_scheduler
 
         if isinstance(duetime, datetime):
-            duetime = _scheduler.to_datetime(duetime) - _scheduler.now
+            duetime = sub_scheduler.to_datetime(duetime) - sub_scheduler.now
         else:
-            duetime = _scheduler.to_timedelta(duetime)
+            duetime = sub_scheduler.to_timedelta(duetime)
 
         cancelable = SerialDisposable()
         exception = [None]
         active = [False]
         running = [False]
-        queue = []
+        queue = deque()
 
-        def on_next(notification):
+        def _on_next(notification):
             should_run = False
 
             with source.lock:
                 if notification.value.kind == 'E':
-                    del queue[:]
+                    queue.clear()
                     queue.append(notification)
                     exception[0] = notification.value.exception
                     should_run = not running[0]
                 else:
-                    queue.append(Timestamp(value=notification.value, timestamp=notification.timestamp + duetime))
+                    stamp = notification.timestamp + duetime
+                    queue.append(Timestamp(value=notification.value,
+                                           timestamp=stamp))
                     should_run = not active[0]
                     active[0] = True
 
             if should_run:
                 if exception[0]:
-                    observer.on_error(exception[0])
+                    if on_error is not None:
+                        on_error(exception[0])
                 else:
                     mad = MultipleAssignmentDisposable()
                     cancelable.disposable = mad
 
-                    def action(scheduler, state):
+                    def action(act_scheduler: typing.Scheduler, __: Any = None) -> None:
                         if exception[0]:
                             return
 
@@ -64,11 +73,11 @@ def observable_delay_timespan(source: Observable, duetime: typing.RelativeTime,
                             running[0] = True
                             while True:
                                 result = None
-                                if queue and queue[0].timestamp <= scheduler.now:
-                                    result = queue.pop(0).value
+                                if queue and queue[0].timestamp <= act_scheduler.now:
+                                    result = queue.popleft().value
 
                                 if result:
-                                    result.accept(observer)
+                                    result.accept(on_next, on_error, on_completed)
 
                                 if not result:
                                     break
@@ -77,7 +86,7 @@ def observable_delay_timespan(source: Observable, duetime: typing.RelativeTime,
                             recurse_duetime = 0
                             if queue:
                                 should_continue = True
-                                diff = queue[0].timestamp - scheduler.now
+                                diff = queue[0].timestamp - act_scheduler.now
                                 zero = DELTA_ZERO if isinstance(diff, timedelta) else 0
                                 recurse_duetime = max(zero, diff)
                             else:
@@ -87,21 +96,24 @@ def observable_delay_timespan(source: Observable, duetime: typing.RelativeTime,
                             running[0] = False
 
                         if ex:
-                            observer.on_error(ex)
+                            if on_error is not None:
+                                on_error(ex)
                         elif should_continue:
-                            mad.disposable = scheduler.schedule_relative(recurse_duetime, action)
+                            mad.disposable = act_scheduler.schedule_relative(recurse_duetime, action)
 
-                    mad.disposable = _scheduler.schedule_relative(duetime, action)
+                    mad.disposable = sub_scheduler.schedule_relative(duetime, action)
         subscription = source.pipe(
             ops.materialize(),
             ops.timestamp()
-        ).subscribe(on_next, scheduler=scheduler_)
+        ).subscribe(_on_next, scheduler=scheduler)
 
         return CompositeDisposable(subscription, cancelable)
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
-def _delay(duetime: typing.RelativeTime, scheduler: Optional[typing.Scheduler] = None) -> Callable[[Observable], Observable]:
+def _delay(duetime: typing.RelativeTime,
+           scheduler: Optional[typing.Scheduler] = None
+           ) -> Callable[[Observable], Observable]:
     def delay(source: Observable) -> Observable:
         """Time shifts the observable sequence.
 

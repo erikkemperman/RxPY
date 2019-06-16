@@ -2,10 +2,12 @@ from typing import Callable, Optional
 
 from rx.core import Observable, typing
 from rx.core.observer import ObserveOnObserver
-from rx.internal.utils import subscribe as _subscribe
 
 
-def _observe_on(scheduler: typing.Scheduler) -> Callable[[Observable], Observable]:
+def _observe_on(scheduler: typing.Scheduler
+                ) -> Callable[[Observable], Observable]:
+    op_scheduler = scheduler
+
     def observe_on(source: Observable) -> Observable:
         """Wraps the source sequence in order to run its observer
         callbacks on the specified scheduler.
@@ -24,11 +26,14 @@ def _observe_on(scheduler: typing.Scheduler) -> Callable[[Observable], Observabl
             the specified scheduler.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            return _subscribe(source, ObserveOnObserver(scheduler, observer),
-                             scheduler=scheduler_)
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            obs = ObserveOnObserver(op_scheduler, on_next, on_error, on_completed)
+            return source.subscribe(obs.on_next, obs.on_error, obs.on_completed,
+                                    scheduler=scheduler)
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return observe_on

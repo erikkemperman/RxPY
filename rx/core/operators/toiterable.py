@@ -12,25 +12,29 @@ def _to_iterable() -> Callable[[Observable], Observable]:
             sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             nonlocal source
 
             queue = []
 
-            def on_next(item):
+            def _on_next(item):
                 queue.append(item)
 
-            def on_completed():
-                observer.on_next(queue)
-                observer.on_completed()
+            def _on_completed():
+                if on_next is not None:
+                    on_next(queue)
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return to_iterable

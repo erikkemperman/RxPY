@@ -19,9 +19,11 @@ def _combine_latest(*sources: Observable) -> Observable:
 
     parent = sources[0]
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
 
         n = len(sources)
         has_value = [False] * n
@@ -34,40 +36,42 @@ def _combine_latest(*sources: Observable) -> Observable:
 
             if has_value_all[0] or all(has_value):
                 res = tuple(values)
-                observer.on_next(res)
+                if on_next is not None:
+                    on_next(res)
 
             elif all([x for j, x in enumerate(is_done) if j != i]):
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
             has_value_all[0] = all(has_value)
 
-        def done(i):
+        def _completed(i):
             is_done[i] = True
-            if all(is_done):
-                observer.on_completed()
+            if all(is_done) and on_completed is not None:
+                on_completed()
 
         subscriptions = [None] * n
 
         def func(i):
             subscriptions[i] = SingleAssignmentDisposable()
 
-            def on_next(x):
+            def _on_next(x):
                 with parent.lock:
                     values[i] = x
                     _next(i)
 
-            def on_completed():
+            def _on_completed():
                 with parent.lock:
-                    done(i)
+                    _completed(i)
 
             subscriptions[i].disposable = sources[i].subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
 
         for idx in range(n):
             func(idx)
         return CompositeDisposable(subscriptions)
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

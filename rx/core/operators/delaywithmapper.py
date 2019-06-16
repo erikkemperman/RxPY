@@ -31,55 +31,60 @@ def _delay_with_mapper(subscription_delay=None, delay_duration_mapper=None) -> C
         else:
             mapper = subscription_delay
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             delays = CompositeDisposable()
             at_end = [False]
 
             def done():
-                if (at_end[0] and delays.length == 0):
-                    observer.on_completed()
+                if at_end[0] and delays.length == 0 and on_completed is not None:
+                    on_completed()
 
             subscription = SerialDisposable()
 
             def start():
-                def on_next(x):
+                def _on_next(x):
                     try:
                         delay = mapper(x)
                     except Exception as error:
-                        observer.on_error(error)
+                        if on_error is not None:
+                            on_error(error)
                         return
 
                     d = SingleAssignmentDisposable()
                     delays.add(d)
 
-                    def on_next(_):
-                        observer.on_next(x)
+                    def _next(_):
+                        if on_next is not None:
+                            on_next(x)
                         delays.remove(d)
                         done()
 
-                    def on_completed():
-                        observer.on_next(x)
+                    def _completed():
+                        if on_next is not None:
+                            on_next(x)
                         delays.remove(d)
                         done()
 
                     d.disposable = delay.subscribe(
-                        on_next,
-                        observer.on_error,
-                        on_completed,
+                        _next,
+                        on_error,
+                        _completed,
                         scheduler=scheduler
                     )
 
-                def on_completed():
+                def _on_completed():
                     at_end[0] = True
                     subscription.dispose()
                     done()
 
                 subscription.disposable = source.subscribe(
-                    on_next,
-                    observer.on_error,
-                    on_completed,
+                    _on_next,
+                    on_error,
+                    _on_completed,
                     scheduler=scheduler
                 )
 
@@ -88,9 +93,10 @@ def _delay_with_mapper(subscription_delay=None, delay_duration_mapper=None) -> C
             else:
                 subscription.disposable = sub_delay.subscribe(
                     lambda _: start(),
-                    observer.on_error,
-                    start)
+                    on_error,
+                    start
+                )
 
             return CompositeDisposable(subscription, delays)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return delay_with_mapper

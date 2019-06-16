@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from rx.scheduler import immediate_scheduler
 
@@ -17,12 +17,15 @@ class Notification:
         self.value = None
         self.kind = ''
 
-    def accept(self, on_next, on_error=None, on_completed=None):
-        """Invokes the delegate corresponding to the notification or an
-        observer and returns the produced result.
+    @abstractmethod
+    def accept(self,
+               on_next: Optional[typing.OnNext] = None,
+               on_error: Optional[typing.OnError] = None,
+               on_completed: Optional[typing.OnCompleted] = None):
+        """Invokes the delegate corresponding to the notification and
+        returns the produced result.
 
         Examples:
-            >>> notification.accept(observer)
             >>> notification.accept(on_next, on_error, on_completed)
 
         Args:
@@ -35,17 +38,6 @@ class Notification:
         Returns:
             Result produced by the observation."""
 
-        if isinstance(on_next, typing.Observer):
-            return self._accept_observer(on_next)
-
-        return self._accept(on_next, on_error, on_completed)
-
-    @abstractmethod
-    def _accept(self, on_next, on_error, on_completed):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _accept_observer(self, observer):
         raise NotImplementedError
 
     def to_observable(self, scheduler=None):
@@ -61,18 +53,21 @@ class Notification:
             notification upon subscription.
         """
 
-        scheduler = scheduler or immediate_scheduler
+        obs_scheduler = scheduler
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            def action(scheduler, state):
-                self._accept_observer(observer)
-                if self.kind == 'N':
-                    observer.on_completed()
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            sub_scheduler = obs_scheduler or scheduler or immediate_scheduler
+            def action(_: typing.Scheduler, __: Any = None) -> None:
+                self.accept(on_next, on_error, on_completed)
+                if self.kind == 'N' and on_completed is not None:
+                    on_completed()
 
-            return scheduler.schedule(action)
-        return Observable(subscribe_observer=subscribe_observer)
+            return sub_scheduler.schedule(action)
+        return Observable(subscribe)
 
     def equals(self, other):
         """Indicates whether this instance and a specified object are
@@ -91,16 +86,16 @@ class OnNext(Notification):
     def __init__(self, value):
         """Constructs a notification of a new value."""
 
-        super(OnNext, self).__init__()
+        super().__init__()
         self.value = value
         self.has_value = True
         self.kind = 'N'
 
-    def _accept(self, on_next, on_error=None, on_completed=None):
+    def accept(self,
+               on_next: Optional[typing.OnNext] = None,
+               on_error: Optional[typing.OnError] = None,
+               on_completed: Optional[typing.OnCompleted] = None):
         return on_next(self.value)
-
-    def _accept_observer(self, observer):
-        return observer.on_next(self.value)
 
     def __str__(self):
         return "OnNext(%s)" % str(self.value)
@@ -112,15 +107,15 @@ class OnError(Notification):
     def __init__(self, exception):
         """Constructs a notification of an exception."""
 
-        super(OnError, self).__init__()
+        super().__init__()
         self.exception = exception
         self.kind = 'E'
 
-    def _accept(self, on_next, on_error, on_completed):
+    def accept(self,
+               on_next: Optional[typing.OnNext] = None,
+               on_error: Optional[typing.OnError] = None,
+               on_completed: Optional[typing.OnCompleted] = None):
         return on_error(self.exception)
-
-    def _accept_observer(self, observer):
-        return observer.on_error(self.exception)
 
     def __str__(self):
         return "OnError(%s)" % str(self.exception)
@@ -132,14 +127,14 @@ class OnCompleted(Notification):
     def __init__(self):
         """Constructs a notification of the end of a sequence."""
 
-        super(OnCompleted, self).__init__()
+        super().__init__()
         self.kind = 'C'
 
-    def _accept(self, on_next, on_error, on_completed):
+    def accept(self,
+               on_next: Optional[typing.OnNext] = None,
+               on_error: Optional[typing.OnError] = None,
+               on_completed: Optional[typing.OnCompleted] = None):
         return on_completed()
-
-    def _accept_observer(self, observer):
-        return observer.on_completed()
 
     def __str__(self):
         return "OnCompleted()"

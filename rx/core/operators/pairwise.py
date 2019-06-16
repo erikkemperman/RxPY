@@ -19,13 +19,15 @@ def _pairwise() -> Callable[[Observable], Observable]:
             observations from the input observable as an array.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             has_previous = [False]
             previous = [None]
 
-            def on_next(x):
+            def _on_next(x):
                 pair = None
 
                 with source.lock:
@@ -36,13 +38,13 @@ def _pairwise() -> Callable[[Observable], Observable]:
 
                     previous[0] = x
 
-                if pair:
-                    observer.on_next(pair)
+                if pair and on_next is not None:
+                    on_next(pair)
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed
+                _on_next,
+                on_error,
+                on_completed
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return pairwise

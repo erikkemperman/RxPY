@@ -1,4 +1,6 @@
+from collections import deque
 from typing import Callable, Optional
+
 from rx.core import Observable, typing
 
 
@@ -21,26 +23,28 @@ def _skip_last(count: int) -> Callable[[Observable], Observable]:
             elements except for the bypassed ones at the end.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            q = []
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            q = deque()
 
-            def on_next(value):
+            def _on_next(value):
                 front = None
                 with source.lock:
                     q.append(value)
                     if len(q) > count:
-                        front = q.pop(0)
+                        front = q.popleft()
 
-                if front is not None:
-                    observer.on_next(front)
+                if front is not None and on_next is not None:
+                    on_next(front)
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                observer.on_completed,
+                _on_next,
+                on_error,
+                on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return skip_last

@@ -1,4 +1,5 @@
-from typing import Optional, List
+from collections import deque
+from typing import Deque, List, Optional
 
 from rx import from_future
 from rx.core import Observable, typing
@@ -26,50 +27,55 @@ def _zip(*args: Observable) -> Observable:
 
     sources = list(args)
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         n = len(sources)
-        queues : List[List] = [[] for _ in range(n)]
+        queues : List[Deque] = [deque() for _ in range(n)]
         is_done = [False] * n
 
-        def next(i):
+        def _on_next(i):
             if all([len(q) for q in queues]):
                 try:
-                    queued_values = [x.pop(0) for x in queues]
+                    queued_values = [x.popleft() for x in queues]
                     res = tuple(queued_values)
                 except Exception as ex:  # pylint: disable=broad-except
-                    observer.on_error(ex)
+                    if on_error is not None:
+                        on_error(ex)
                     return
 
-                observer.on_next(res)
-            elif all([x for j, x in enumerate(is_done) if j != i]):
-                observer.on_completed()
+                if on_next is not None:
+                    on_next(res)
+            elif on_completed is not None \
+                    and all([x for j, x in enumerate(is_done) if j != i]):
+                on_completed()
 
-        def done(i):
+        def _done(i):
             is_done[i] = True
-            if all(is_done):
-                observer.on_completed()
+            if on_completed is not None and all(is_done):
+                on_completed()
 
-        subscriptions = [None]*n
+        subscriptions = [None] * n
 
         def func(i):
             source = sources[i]
             sad = SingleAssignmentDisposable()
             source = from_future(source) if is_future(source) else source
 
-            def on_next(x):
+            def _next(x):
                 queues[i].append(x)
-                next(i)
+                _on_next(i)
 
             sad.disposable = source.subscribe(
-                on_next,
-                observer.on_error,
-                lambda: done(i),
+                _next,
+                on_error,
+                lambda: _done(i),
                 scheduler=scheduler
             )
             subscriptions[i] = sad
         for idx in range(n):
             func(idx)
         return CompositeDisposable(subscriptions)
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

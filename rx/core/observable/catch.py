@@ -26,10 +26,12 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
 
     sources_ = iter(sources)
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        scheduler = scheduler or current_thread_scheduler
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        _scheduler = scheduler or current_thread_scheduler
 
         subscription = SerialDisposable()
         cancelable = SerialDisposable()
@@ -37,9 +39,9 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
         is_disposed = []
 
         def action(action1, state=None):
-            def on_error(exn):
+            def _on_error(exn):
                 last_exception[0] = exn
-                cancelable.disposable = scheduler.schedule(action)
+                cancelable.disposable = _scheduler.schedule(action)
 
             if is_disposed:
                 return
@@ -48,24 +50,26 @@ def _catch_with_iterable(sources: Iterable[Observable]) -> Observable:
                 current = next(sources_)
             except StopIteration:
                 if last_exception[0]:
-                    observer.on_error(last_exception[0])
-                else:
-                    observer.on_completed()
+                    if on_error is not None:
+                        on_error(last_exception[0])
+                elif on_completed is not None:
+                    on_completed()
             except Exception as ex:  # pylint: disable=broad-except
-                observer.on_error(ex)
+                if on_error is not None:
+                    on_error(ex)
             else:
                 d = SingleAssignmentDisposable()
                 subscription.disposable = d
                 d.disposable = current.subscribe(
-                    observer.on_next,
-                    on_error,
-                    observer.on_completed,
-                    scheduler=scheduler
+                    on_next,
+                    _on_error,
+                    on_completed,
+                    scheduler=_scheduler
                 )
 
-        cancelable.disposable = scheduler.schedule(action)
+        cancelable.disposable = _scheduler.schedule(action)
 
         def dispose():
             is_disposed.append(True)
         return CompositeDisposable(subscription, cancelable, Disposable(dispose))
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

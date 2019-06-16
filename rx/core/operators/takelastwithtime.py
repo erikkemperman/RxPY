@@ -1,10 +1,15 @@
+from collections import deque
 from typing import Callable, Optional
+
 from rx.core import Observable, typing
 from rx.scheduler import timeout_scheduler
 
 
-def _take_last_with_time(duration: typing.RelativeTime, scheduler: Optional[typing.Scheduler] = None
+def _take_last_with_time(duration: typing.RelativeTime,
+                         scheduler: Optional[typing.Scheduler] = None
                          ) -> Callable[[Observable], Observable]:
+    op_scheduler = scheduler
+
     def take_last_with_time(source: Observable) -> Observable:
         """Returns elements within the specified duration from the end
         of the observable source sequence.
@@ -27,35 +32,39 @@ def _take_last_with_time(duration: typing.RelativeTime, scheduler: Optional[typi
             specified duration from the end of the source sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler_: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             nonlocal duration
 
-            _scheduler = scheduler or scheduler_ or timeout_scheduler
-            duration = _scheduler.to_timedelta(duration)
-            q = []
+            sub_scheduler = op_scheduler or scheduler or timeout_scheduler
+            duration = sub_scheduler.to_timedelta(duration)
+            q = deque()
 
-            def on_next(x):
-                now = _scheduler.now
+            def _on_next(x):
+                now = sub_scheduler.now
                 q.append({"interval": now, "value": x})
                 while q and now - q[0]["interval"] >= duration:
-                    q.pop(0)
+                    q.popleft()
 
-            def on_completed():
-                now = _scheduler.now
+            def _on_completed():
+                now = sub_scheduler.now
                 while q:
-                    _next = q.pop(0)
-                    if now - _next["interval"] <= duration:
-                        observer.on_next(_next["value"])
+                    _next = q.popleft()
+                    if now - _next["interval"] <= duration \
+                            and on_next is not None:
+                        on_next(_next["value"])
 
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
-                scheduler=scheduler_
+                _on_next,
+                on_error,
+                _on_completed,
+                scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return take_last_with_time

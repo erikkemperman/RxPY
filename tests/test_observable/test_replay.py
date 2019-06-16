@@ -2,7 +2,6 @@ import unittest
 
 import rx
 from rx import operators as ops
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 on_next = ReactiveTest.on_next
@@ -30,7 +29,10 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results, scheduler=scheduler)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed,
+                                              scheduler=scheduler)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -80,7 +82,9 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -122,7 +126,9 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scehduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -164,7 +170,9 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -268,7 +276,9 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -319,7 +329,10 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results, scheduler=scheduler)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed,
+                                              scheduler=scheduler)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -360,7 +373,10 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results, scheduler=scheduler)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed,
+                                              scheduler=scheduler)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):
@@ -402,7 +418,10 @@ class TestReplay(unittest.TestCase):
         scheduler.schedule_absolute(created, action0)
 
         def action1(scheduler, state):
-            subscription[0] = _subscribe(ys[0], results, scheduler=scheduler)
+            subscription[0] = ys[0].subscribe(results.on_next,
+                                              results.on_error,
+                                              results.on_completed,
+                                              scheduler=scheduler)
         scheduler.schedule_absolute(450, action1)
 
         def action2(scheduler, state):

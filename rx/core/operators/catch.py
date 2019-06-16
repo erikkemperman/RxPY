@@ -3,38 +3,42 @@ from typing import Callable, Optional, Union
 import rx
 from rx.core import Observable, typing
 from rx.disposable import SingleAssignmentDisposable, SerialDisposable
-from rx.internal.utils import is_future, subscribe as _subscribe
+from rx.internal.utils import is_future
 
 
 def catch_handler(source: Observable, handler: Callable[[Exception, Observable], Observable]) -> Observable:
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
         d1 = SingleAssignmentDisposable()
         subscription = SerialDisposable()
 
         subscription.disposable = d1
 
-        def on_error(exception):
+        def _on_error(exception):
             try:
                 result = handler(exception, source)
             except Exception as ex:  # By design. pylint: disable=W0703
-                observer.on_error(ex)
+                if on_error is not None:
+                    on_error(ex)
                 return
 
             result = rx.from_future(result) if is_future(result) else result
             d = SingleAssignmentDisposable()
             subscription.disposable = d
-            d.disposable = _subscribe(result, observer, scheduler=scheduler)
+            d.disposable = result.subscribe(on_next, on_error, on_completed,
+                                            scheduler=scheduler)
 
         d1.disposable = source.subscribe(
-            observer.on_next,
-            on_error,
-            observer.on_completed,
+            on_next,
+            _on_error,
+            on_completed,
             scheduler=scheduler
         )
         return subscription
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)
 
 
 def _catch(handler: Union[Observable, Callable[[Exception, Observable], Observable]]

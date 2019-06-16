@@ -290,9 +290,8 @@ class Subject(Generic[T_in, T_out], abc.Subject):
         raise NotImplementedError
 
 
-SubscribeCallbacks = Callable[[Optional[OnNext],
-                               Optional[OnError],
-                               Optional[OnCompleted],
-                               Optional[Scheduler]
-                               ], Disposable]
-SubscribeObserver = Callable[[Observer, Optional[Scheduler]], Disposable]
+Subscribe = Callable[[Optional[OnNext],
+                      Optional[OnError],
+                      Optional[OnCompleted],
+                      Optional[Scheduler]
+                      ], Disposable]

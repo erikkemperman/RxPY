@@ -3,7 +3,6 @@ from typing import Any, Callable, Optional
 from rx.core import typing
 from rx.core import Observable
 from rx.scheduler import current_thread_scheduler
-from rx.core.abc.scheduler import Scheduler
 
 
 def _return_value(value: Any, scheduler: Optional[typing.Scheduler] = None) -> Observable:
@@ -23,33 +22,46 @@ def _return_value(value: Any, scheduler: Optional[typing.Scheduler] = None) -> O
         element.
     """
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or current_thread_scheduler
+    obs_scheduler = scheduler
 
-        def action(scheduler: typing.Scheduler, state: Any = None):
-            observer.on_next(value)
-            observer.on_completed()
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or current_thread_scheduler
 
-        return _scheduler.schedule(action)
-    return Observable(subscribe_observer=subscribe_observer)
+        def action(_: typing.Scheduler, __: Any = None) -> None:
+            if on_next is not None:
+                on_next(value)
+            if on_completed is not None:
+                on_completed()
+
+        return sub_scheduler.schedule(action)
+    return Observable(subscribe)
 
 
-def _from_callable(supplier: Callable[[], Any], scheduler: Optional[typing.Scheduler] = None) -> Observable:
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler_: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
-        _scheduler = scheduler or scheduler_ or current_thread_scheduler
+def _from_callable(supplier: Callable[[], Any],
+                   scheduler: Optional[typing.Scheduler] = None
+                   ) -> Observable:
+    obs_scheduler = scheduler
 
-        def action(_: Scheduler, __: Any = None):
-            nonlocal observer
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
+        sub_scheduler = obs_scheduler or scheduler or current_thread_scheduler
 
+        def action(_: typing.Scheduler, __: Any = None) -> None:
             try:
-                observer.on_next(supplier())
-                observer.on_completed()
+                if on_next is not None:
+                    on_next(supplier())
+                if on_completed is not None:
+                    on_completed()
             except Exception as e:  # pylint: disable=broad-except
-                observer.on_error(e)
-        return _scheduler.schedule(action)
+                if on_error is not None:
+                    on_error(e)
+        return sub_scheduler.schedule(action)
 
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

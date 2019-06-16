@@ -25,20 +25,28 @@ def _some(predicate: Optional[Predicate] = None) -> Callable[[Observable], Obser
             some items are in the sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            def on_next(_):
-                observer.on_next(True)
-                observer.on_completed()
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
 
-            def on_error():
-                observer.on_next(False)
-                observer.on_completed()
+            def _on_next(_):
+                if on_next is not None:
+                    on_next(True)
+                if on_completed is not None:
+                    on_completed()
+
+            def _on_error():
+                if on_next is not None:
+                    on_next(False)
+                if on_completed is not None:
+                    on_completed()
+
             return source.subscribe(
-                on_next,
-                observer.on_error,
+                _on_next,
                 on_error,
+                _on_error,
                 scheduler=scheduler
             )
 
@@ -48,5 +56,5 @@ def _some(predicate: Optional[Predicate] = None) -> Callable[[Observable], Obser
                 _some(),
             )
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return some

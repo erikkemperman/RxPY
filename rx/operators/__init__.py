@@ -707,7 +707,7 @@ def do(observer: typing.Observer) -> Callable[[Observable], Observable]:
         applied.
     """
     from rx.core.operators.do import do as do_
-    return do_(observer)
+    return do_(observer.on_next, observer.on_error, observer.on_completed)
 
 
 def do_action(on_next: Optional[typing.OnNext] = None,

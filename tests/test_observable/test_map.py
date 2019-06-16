@@ -3,7 +3,6 @@ import unittest
 from rx import return_value, throw, empty, create
 from rx.testing import TestScheduler, ReactiveTest
 from rx.disposable import SerialDisposable
-from rx.internal.utils import subscribe as _subscribe
 from rx.operators import map, map_indexed
 
 on_next = ReactiveTest.on_next
@@ -44,11 +43,12 @@ class TestSelect(unittest.TestCase):
                 mapper
             ).subscribe(lambda x: x, lambda ex: ex, lambda: _raise('ex'))
 
-        def subscribe(observer, scheduler=None):
+        def subscribe(on_next=None, on_error=None, on_completed=None,
+                      scheduler=None):
             _raise('ex')
 
         with self.assertRaises(RxException):
-            create(subscribe_observer=subscribe).pipe(
+            create(subscribe).pipe(
                 map(lambda x: x)
             ).subscribe()
 
@@ -66,8 +66,12 @@ class TestSelect(unittest.TestCase):
                 d.dispose()
             return x
 
-        d.disposable = _subscribe(xs.pipe(map(projection)),
-                                  results, scheduler=scheduler)
+        d.disposable = xs.pipe(map(projection)).subscribe(
+            results.on_next,
+            results.on_error,
+            results.on_completed,
+            scheduler=scheduler
+        )
 
         def action(scheduler, state):
             return d.dispose()
@@ -237,7 +241,7 @@ class TestSelect(unittest.TestCase):
             ).subscribe(lambda x: x, lambda ex: None, lambda: _raise('ex'))
 
         with self.assertRaises(RxException):
-            return create(subscribe_observer=lambda o, s: _raise('ex')).pipe(
+            return create(lambda n, e, c, s: _raise('ex')).pipe(
                 mapper
             ).subscribe()
 
@@ -255,7 +259,12 @@ class TestSelect(unittest.TestCase):
 
             return x + index * 10
 
-        d.disposable = _subscribe(xs.pipe(map_indexed(projection)), results)
+        d.disposable = xs.pipe(map_indexed(projection)).subscribe(
+            results.on_next,
+            results.on_error,
+            results.on_completed
+
+        )
 
         def action(scheduler, state):
             return d.dispose()

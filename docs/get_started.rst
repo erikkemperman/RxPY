@@ -187,16 +187,20 @@ emissions:
 
     def lowercase():
         def _lowercase(source):
-            def subscribe_observer(observer, scheduler = None):
-                def on_next(value):
-                    observer.on_next(value.lower())
+            def subscribe(on_next = None,
+                          on_error = None,
+                          on_completed = None,
+                          scheduler = None):
+                def _on_next(value):
+                    if on_next is not None:
+                        on_next(value.lower())
 
                 return source.subscribe(
-                    on_next,
-                    observer.on_error,
-                    observer.on_completed,
-                    scheduler)
-            return rx.create(subscribe_observer=subscribe_observer)
+                    _on_next,
+                    on_error,
+                    on_completed,
+                    scheduler=scheduler)
+            return rx.create(subscribe)
         return _lowercase
 
     rx.of("Alpha", "Beta", "Gamma", "Delta", "Epsilon").pipe(

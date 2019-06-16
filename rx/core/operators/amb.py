@@ -10,9 +10,11 @@ def _amb(right_source: Observable):
     right_source = from_future(right_source) if is_future(right_source) else right_source
 
     def amb(left_source: Observable):
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             choice = [None]
             left_choice = 'L'
             right_choice = 'R'
@@ -32,20 +34,20 @@ def _amb(right_source: Observable):
             def on_next_left(value):
                 with left_source.lock:
                     choice_left()
-                if choice[0] == left_choice:
-                    observer.on_next(value)
+                if choice[0] == left_choice and on_next is not None:
+                    on_next(value)
 
             def on_error_left(err):
                 with left_source.lock:
                     choice_left()
-                if choice[0] == left_choice:
-                    observer.on_error(err)
+                if choice[0] == left_choice and on_error is not None:
+                    on_error(err)
 
             def on_completed_left():
                 with left_source.lock:
                     choice_left()
-                if choice[0] == left_choice:
-                    observer.on_completed()
+                if choice[0] == left_choice and on_completed is not None:
+                    on_completed()
 
             left_d = left_source.subscribe(
                 on_next_left,
@@ -58,20 +60,20 @@ def _amb(right_source: Observable):
             def send_right(value: Any) -> None:
                 with left_source.lock:
                     choice_right()
-                if choice[0] == right_choice:
-                    observer.on_next(value)
+                if choice[0] == right_choice and on_next is not None:
+                    on_next(value)
 
             def on_error_right(err: Exception) -> None:
                 with left_source.lock:
                     choice_right()
-                if choice[0] == right_choice:
-                    observer.on_error(err)
+                if choice[0] == right_choice and on_error is not None:
+                    on_error(err)
 
             def on_completed_right() -> None:
                 with left_source.lock:
                     choice_right()
-                if choice[0] == right_choice:
-                    observer.on_completed()
+                if choice[0] == right_choice and on_completed is not None:
+                    on_completed()
 
             right_d = right_source.subscribe(
                 send_right,
@@ -81,5 +83,5 @@ def _amb(right_source: Observable):
             )
             right_subscription.disposable = right_d
             return CompositeDisposable(left_subscription, right_subscription)
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
     return amb

@@ -1,7 +1,6 @@
 import unittest
 
 from rx import operators as ops
-from rx.internal.utils import subscribe as _subscribe
 from rx.testing import TestScheduler, ReactiveTest
 
 on_next = ReactiveTest.on_next
@@ -38,8 +37,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
         def action2(scheduler, state):
@@ -78,8 +81,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
         def action2(scheduler, state):
@@ -121,8 +128,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
 
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
@@ -169,8 +180,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
 
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
@@ -217,8 +232,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
 
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
@@ -264,8 +283,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
 
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 
@@ -311,8 +334,12 @@ class TestPartition(unittest.TestCase):
         scheduler.schedule_absolute(ReactiveTest.created, action0)
 
         def action1(scheduler, state):
-            subscription1[0] = _subscribe(observables[0], results1)
-            subscription2[0] = _subscribe(observables[1], results2)
+            subscription1[0] = observables[0].subscribe(results1.on_next,
+                                                        results1.on_error,
+                                                        results1.on_completed)
+            subscription2[0] = observables[1].subscribe(results2.on_next,
+                                                        results2.on_error,
+                                                        results2.on_completed)
 
         scheduler.schedule_absolute(ReactiveTest.subscribed, action1)
 

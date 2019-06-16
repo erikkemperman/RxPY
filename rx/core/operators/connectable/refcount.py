@@ -2,7 +2,6 @@ from typing import Callable, Optional
 
 from rx.core import ConnectableObservable, Observable, typing
 from rx.disposable import Disposable
-from rx.internal.utils import subscribe as _subscribe
 
 
 def _ref_count() -> Callable[[ConnectableObservable], Observable]:
@@ -15,12 +14,15 @@ def _ref_count() -> Callable[[ConnectableObservable], Observable]:
     count = [0]
 
     def ref_count(source: ConnectableObservable) -> Observable:
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
             count[0] += 1
             should_connect = count[0] == 1
-            subscription = _subscribe(source, observer, scheduler=scheduler)
+            subscription = source.subscribe(on_next, on_error, on_completed,
+                                            scheduler=scheduler)
             if should_connect:
                 connectable_subscription[0] = source.connect(scheduler)
 
@@ -32,6 +34,6 @@ def _ref_count() -> Callable[[ConnectableObservable], Observable]:
 
             return Disposable(dispose)
 
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe)
 
     return ref_count

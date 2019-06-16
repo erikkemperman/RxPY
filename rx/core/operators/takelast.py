@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Callable, Optional
 from rx.core import Observable, typing
 
@@ -24,26 +25,31 @@ def _take_last(count: int) -> Callable[[Observable], Observable]:
             from the end of the source sequence.
         """
 
-        def subscribe_observer(observer: typing.Observer,
-                               scheduler: Optional[typing.Scheduler] = None
-                               ) -> typing.Disposable:
-            q = []
+        def subscribe(on_next: Optional[typing.OnNext] = None,
+                      on_error: Optional[typing.OnError] = None,
+                      on_completed: Optional[typing.OnCompleted] = None,
+                      scheduler: Optional[typing.Scheduler] = None
+                      ) -> typing.Disposable:
+            q = deque()
 
-            def on_next(x):
+            def _on_next(x):
                 q.append(x)
                 if len(q) > count:
-                    q.pop(0)
+                    q.popleft()
 
-            def on_completed():
+            def _on_completed():
                 while q:
-                    observer.on_next(q.pop(0))
-                observer.on_completed()
+                    val = q.popleft()
+                    if on_next is not None:
+                        on_next(val)
+                if on_completed is not None:
+                    on_completed()
 
             return source.subscribe(
-                on_next,
-                observer.on_error,
-                on_completed,
+                _on_next,
+                on_error,
+                _on_completed,
                 scheduler=scheduler
             )
-        return Observable(subscribe_observer=subscribe_observer)
+        return Observable(subscribe )
     return take_last

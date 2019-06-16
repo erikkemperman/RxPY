@@ -22,11 +22,13 @@ def _on_error_resume_next(*sources: Union[Observable, Future]) -> Observable:
 
     sources_ = iter(sources)
 
-    def subscribe_observer(observer: typing.Observer,
-                           scheduler: Optional[typing.Scheduler] = None
-                           ) -> typing.Disposable:
+    def subscribe(on_next: Optional[typing.OnNext] = None,
+                  on_error: Optional[typing.OnError] = None,
+                  on_completed: Optional[typing.OnCompleted] = None,
+                  scheduler: Optional[typing.Scheduler] = None
+                  ) -> typing.Disposable:
 
-        scheduler = scheduler or current_thread_scheduler
+        _scheduler = scheduler or current_thread_scheduler
 
         subscription = SerialDisposable()
         cancelable = SerialDisposable()
@@ -35,7 +37,8 @@ def _on_error_resume_next(*sources: Union[Observable, Future]) -> Observable:
             try:
                 source = next(sources_)
             except StopIteration:
-                observer.on_completed()
+                if on_completed is not None:
+                    on_completed()
                 return
 
             # Allow source to be a factory method taking an error
@@ -49,12 +52,12 @@ def _on_error_resume_next(*sources: Union[Observable, Future]) -> Observable:
                 scheduler.schedule(action, state)
 
             d.disposable = current.subscribe(
-                observer.on_next,
+                on_next,
                 on_resume,
                 on_resume,
                 scheduler=scheduler
             )
 
-        cancelable.disposable = scheduler.schedule(action)
+        cancelable.disposable = _scheduler.schedule(action)
         return CompositeDisposable(subscription, cancelable)
-    return Observable(subscribe_observer=subscribe_observer)
+    return Observable(subscribe)

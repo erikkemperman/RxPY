@@ -59,10 +59,10 @@ class CheckOnNextObserver(Observer):
 
 
 def test_on_next_accept_observer():
-    con = CheckOnNextObserver()
+    obs = CheckOnNextObserver()
     n1 = OnNext(42)
-    n1.accept(con)
-    assert con.value == 42
+    n1.accept(obs.on_next, obs.on_error, obs.on_completed)
+    assert obs.value == 42
 
 
 class AcceptObserver(Observer):
@@ -94,7 +94,8 @@ def test_on_next_accept_observer_with_result():
     def on_completed():
         assert False
 
-    res = n1.accept(AcceptObserver(on_next, on_error, on_completed))
+    obs = AcceptObserver(on_next, on_error, on_completed)
+    res = n1.accept(obs.on_next, obs.on_error, obs.on_completed)
     assert 'OK' == res
 
 
@@ -178,7 +179,7 @@ def test_throw_accept_observer():
     ex = 'ex'
     obs = CheckOnErrorObserver()
     n1 = OnError(ex)
-    n1.accept(obs)
+    n1.accept(obs.on_next, obs.on_error, obs.on_completed)
     assert ex == obs.error
 
 
@@ -196,7 +197,8 @@ def test_throw_accept_observer_with_result():
         assert False
         return None
 
-    res = n1.accept(AcceptObserver(on_next, on_error, on_completed))
+    obs = AcceptObserver(on_next, on_error, on_completed)
+    res = n1.accept(obs.on_next, obs.on_error, obs.on_completed)
     assert 'OK' == res
 
 
@@ -278,7 +280,7 @@ class CheckOnCompletedObserver(Observer):
 def test_close_accept_observer():
     obs = CheckOnCompletedObserver()
     n1 = OnCompleted()
-    n1.accept(obs)
+    n1.accept(obs.on_next, obs.on_error, obs.on_completed)
     assert obs.completed
 
 
@@ -294,7 +296,8 @@ def test_close_accept_observer_with_result():
     def on_completed():
         return "OK"
 
-    res = n1.accept(AcceptObserver(on_next, on_error, on_completed))
+    obs = AcceptObserver(on_next, on_error, on_completed)
+    res = n1.accept(obs.on_next, obs.on_error, obs.on_completed)
     assert 'OK' == res
 
 
