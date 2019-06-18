@@ -156,30 +156,6 @@ class Observable(typing.Observable):
         return Disposable(auto_detach_observer.dispose)
 
     @overload
-    def pipe(self,
-             *operators: Callable[['Observable'], 'Observable']
-             ) -> 'Observable':  # pylint: disable=no-self-use
-        """Compose multiple operators left to right.
-
-        Composes zero or more operators into a functional composition.
-        The operators are composed from left to right. A composition of zero
-        operators gives back the original source.
-
-        Examples:
-            >>> source.pipe() == source
-            >>> source.pipe(f) == f(source)
-            >>> source.pipe(g, f) == f(g(source))
-            >>> source.pipe(h, g, f) == f(g(h(source)))
-
-        Args:
-            operators: Sequence of operators.
-
-        Returns:
-             The composed observable.
-        """
-        ...
-
-    @overload
     def pipe(self) -> 'Observable':  # pylint: disable=function-redefined, no-self-use
         ...  # pylint: disable=pointless-statement
 
@@ -238,8 +214,14 @@ class Observable(typing.Observable):
              op7: Callable[[F], G]) -> G:
         ...  # pylint: disable=pointless-statement
 
+    @overload
+    def pipe(self,  # pylint: disable=function-redefined, disable=no-self-use
+             *operators: Callable[['Observable'], 'Observable']
+             ) -> 'Observable':
+        ...  # pylint: disable=pointless-statement
+
     # pylint: disable=function-redefined
-    def pipe(self, *operators: Callable[['Observable'], Any]) -> Any:
+    def pipe(self, *operators: Callable[['Observable'], Any], **kwargs) -> Any:
         """Compose multiple operators left to right.
 
         Composes zero or more operators into a functional composition.
@@ -258,6 +240,7 @@ class Observable(typing.Observable):
         Returns:
              The composed observable.
         """
+
         from ..pipe import pipe
         return pipe(*operators)(self)
 
