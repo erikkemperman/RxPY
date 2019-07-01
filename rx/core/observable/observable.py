@@ -156,7 +156,14 @@ class Observable(typing.Observable):
         return Disposable(auto_detach_observer.dispose)
 
     @overload
-    # pylint: no-self-use
+    # pylint: disable=function-redefined, no-self-use
+    def pipe(self,
+             *operators: Callable[['Observable'], 'Observable']
+             ) -> 'Observable':
+        ...  # pylint: disable=pointless-statement
+
+    @overload
+    # pylint: disable=no-self-use
     def pipe(self) -> 'Observable':
         ...  # pylint: disable=pointless-statement
 
@@ -220,13 +227,6 @@ class Observable(typing.Observable):
              op5: Callable[[D], E],
              op6: Callable[[E], F],
              op7: Callable[[F], G]) -> G:
-        ...  # pylint: disable=pointless-statement
-
-    @overload
-    # pylint: disable=function-redefined, no-self-use
-    def pipe(self,
-             *operators: Callable[['Observable'], 'Observable']
-             ) -> 'Observable':
         ...  # pylint: disable=pointless-statement
 
     # pylint: disable=function-redefined, no-self-use

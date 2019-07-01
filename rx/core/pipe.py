@@ -11,6 +11,14 @@ G = TypeVar('G')
 
 
 @overload
+# pylint: disable=function-redefined,too-many-arguments
+def pipe(*operators: Callable[['Observable'], 'Observable']  # type: ignore
+         ) -> Callable[['Observable'], 'Observable']:        # type: ignore
+
+    ...  # pylint: disable=pointless-statement
+
+
+@overload
 def pipe() -> Callable[[A], A]:
     ...  # pylint: disable=pointless-statement
 
@@ -69,14 +77,6 @@ def pipe(op1: Callable[[A], B],
          op5: Callable[[E], F],
          op6: Callable[[F], G]
          ) -> Callable[[A], G]:
-    ...  # pylint: disable=pointless-statement
-
-
-@overload
-# pylint: disable=function-redefined,too-many-arguments
-def pipe(*operators: Callable[['Observable'], 'Observable']  # type: ignore
-         ) -> Callable[['Observable'], 'Observable']:        # type: ignore
-
     ...  # pylint: disable=pointless-statement
 
 
